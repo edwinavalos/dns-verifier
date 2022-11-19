@@ -1,12 +1,16 @@
 package config
 
-import "context"
+import (
+	"context"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+)
 
 type AWSSettings struct {
 	Region               string
 	BucketName           string
 	VerificationFileName string
 	CancelCtx            context.CancelFunc
+	S3Client             *s3.Client
 }
 
 type Config struct {

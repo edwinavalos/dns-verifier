@@ -1,11 +1,11 @@
-package dnsVerifier
+package main
 
 import (
 	"context"
 	"dnsVerifier/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -40,7 +40,13 @@ func main() {
 		panic(err)
 	}
 
-	svc := s3.NewFromConfig(cfg)
+	awsS3Client := s3.NewFromConfig(cfg)
+	config.Aws.S3Client = awsS3Client
 
-	resp, err := svc.GetObject()
+	err = GetOrCreateVerificationFile(cCtx, awsS3Client, config)
+	if err != nil {
+		log.Panic().Msgf("unable to get verification file from s3")
+		panic(err)
+	}
+
 }
