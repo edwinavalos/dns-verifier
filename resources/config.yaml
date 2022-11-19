@@ -2,4 +2,6 @@ aws:
   region: us-west-2
   s3BucketName: mastodon-dns-verification
   verificationFileName: verification.json
+app:
+  verificationTxtRecordName: "mastodon_ownership_key"
 

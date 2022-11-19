@@ -13,8 +13,13 @@ type AWSSettings struct {
 	S3Client             *s3.Client
 }
 
+type AppSettings struct {
+	VerificationTxtRecordName string
+}
+
 type Config struct {
 	Aws        AWSSettings
+	App        AppSettings
 	RootCancel context.CancelFunc
 	RootCtx    context.Context
 }
