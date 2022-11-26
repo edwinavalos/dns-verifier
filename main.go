@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"dnsVerifier/config"
+	"dnsVerifier/utils"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"sync"
 
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/rs/zerolog"
@@ -28,28 +30,32 @@ func main() {
 
 	cCtx, cancel := context.WithCancel(rootCtx)
 
-	config := config.NewConfig()
-	config.RootCtx = rootCtx
-	config.Aws.Region = viper.GetString("aws.region")
-	config.Aws.BucketName = viper.GetString("aws.s3BucketName")
-	config.Aws.VerificationFileName = viper.GetString("aws.verificationFileName")
-	config.Aws.CancelCtx = cancel
-	config.App.VerificationTxtRecordName = viper.GetString("app.verificationTxtRecordName")
+	appConfig := config.NewConfig()
+	appConfig.RootCtx = rootCtx
+	appConfig.Aws.CancelCtx = cancel
+	appConfig.ReadConfig()
 
-	cfg, err := awsConfig.LoadDefaultConfig(cCtx, awsConfig.WithRegion(config.Aws.Region))
+	if appConfig.Aws.BucketName == "" || appConfig.Aws.VerificationFileName == "" {
+		log.Fatal().Msgf("did not have enough information to get or create verfication_service file")
+		log.Debug().Msgf("bucketName: {%s}, verificationFileName {%s}", appConfig.Aws.BucketName, appConfig.Aws.VerificationFileName)
+		panic(fmt.Errorf("missing aws configuration"))
+	}
+
+	cfg, err := awsConfig.LoadDefaultConfig(cCtx, awsConfig.WithRegion(appConfig.Aws.Region))
 	if err != nil {
-		log.Panic().Msg("unable to load default aws config")
+		log.Panic().Msg("unable to load default aws appConfig")
 		panic(err)
 	}
 
 	awsS3Client := s3.NewFromConfig(cfg)
-	config.Aws.S3Client = awsS3Client
+	appConfig.Aws.S3Client = awsS3Client
 
-	verificationList, err := GetOrCreateVerificationFile(cCtx, awsS3Client, config)
+	var verifications *sync.Map
+	verifications, err = utils.GetOrCreateVerificationFile(cCtx, appConfig)
 	if err != nil {
-		log.Panic().Msgf("unable to get verification file from s3")
+		log.Panic().Msgf("unable to get verfication_service file from s3")
 		panic(err)
 	}
-	fmt.Printf("verificationList: %s", verificationList)
+	fmt.Printf("verifications: %+v", utils.SyncMap2Map(verifications))
 
 }
