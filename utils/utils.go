@@ -29,7 +29,7 @@ func SyncMap2Map(syncMap *sync.Map) map[string]interface{} {
 
 func SaveVerificationFile(ctx context.Context, verifications *sync.Map, config *config.Config) error {
 	verificationFileName := config.Aws.VerificationFileName
-	log.Debug().Msgf("creating verfication_service file at s3://%s/%s", config.Aws.BucketName, config.Aws.VerificationFileName)
+	log.Debug().Msgf("creating verification_service file at s3://%s/%s", config.Aws.BucketName, config.Aws.VerificationFileName)
 	jsonMap := SyncMap2Map(verifications)
 	content, _ := json.MarshalIndent(jsonMap, "", " ")
 	err := ioutil.WriteFile(verificationFileName, content, 0644)
@@ -89,7 +89,7 @@ func GetOrCreateVerificationFile(ctx context.Context, config *config.Config) (*s
 	if getObjectOutput.ContentLength != 0 {
 		err = json.NewDecoder(getObjectOutput.Body).Decode(&verifications)
 		if err != nil {
-			log.Error().Msgf("unable to decode contents of verfication_service file into verfication_service list")
+			log.Error().Msgf("unable to decode contents of verification_service file into verification_service list")
 			return verifications, err
 		}
 	}

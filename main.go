@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"dnsVerifier/config"
+	"dnsVerifier/server"
+	"dnsVerifier/service/verification_service"
 	"dnsVerifier/utils"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"net/url"
 	"sync"
 
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
@@ -36,7 +39,7 @@ func main() {
 	appConfig.ReadConfig()
 
 	if appConfig.Aws.BucketName == "" || appConfig.Aws.VerificationFileName == "" {
-		log.Fatal().Msgf("did not have enough information to get or create verfication_service file")
+		log.Fatal().Msgf("did not have enough information to get or create verification_service file")
 		log.Debug().Msgf("bucketName: {%s}, verificationFileName {%s}", appConfig.Aws.BucketName, appConfig.Aws.VerificationFileName)
 		panic(fmt.Errorf("missing aws configuration"))
 	}
@@ -53,9 +56,15 @@ func main() {
 	var verifications *sync.Map
 	verifications, err = utils.GetOrCreateVerificationFile(cCtx, appConfig)
 	if err != nil {
-		log.Panic().Msgf("unable to get verfication_service file from s3")
+		log.Panic().Msgf("unable to get verification_service file from s3")
 		panic(err)
 	}
 	fmt.Printf("verifications: %+v", utils.SyncMap2Map(verifications))
-
+	testDomain, err := url.Parse("http://test.com")
+	if err != nil {
+		panic(err)
+	}
+	verifications.Store("test", verification_service.Verification{DomainName: testDomain})
+	srv := server.NewServer(appConfig, verifications)
+	srv.ListenAndServe()
 }

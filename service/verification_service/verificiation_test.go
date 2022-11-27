@@ -1,10 +1,10 @@
-package verfication_service
+package verification_service
 
 import (
 	"context"
+	models2 "dnsVerifier"
 	"dnsVerifier/config"
 	"dnsVerifier/models"
-	"net/url"
 	"testing"
 	"time"
 )
@@ -13,7 +13,7 @@ func TestVerifyDomain(t *testing.T) {
 	ctx := context.Background()
 	type args struct {
 		ctx              context.Context
-		verificationList []models.Verification
+		verificationList []models.VerificationFile
 		config           *config.Config
 		shouldVerify     bool
 	}
@@ -25,8 +25,8 @@ func TestVerifyDomain(t *testing.T) {
 		name: "edwinavalos.com test",
 		args: args{
 			ctx: ctx,
-			verificationList: []models.Verification{{
-				Domain:          url.URL{Host: "edwinavalos.com"},
+			verificationList: []models.VerificationFile{{
+				Domain:          models2.URL{Host: "edwinavalos.com"},
 				VerificationKey: "111122223333",
 				Verified:        false,
 				WarningStamp:    time.Time{},
@@ -48,8 +48,8 @@ func TestVerifyDomain(t *testing.T) {
 			name: "edwinavalos.com test",
 			args: args{
 				ctx: ctx,
-				verificationList: []models.Verification{{
-					Domain:          url.URL{Host: "edwinavalos.com"},
+				verificationList: []models.VerificationFile{{
+					Domain:          models2.URL{Host: "edwinavalos.com"},
 					VerificationKey: "333322221111",
 					Verified:        false,
 					WarningStamp:    time.Time{},

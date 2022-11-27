@@ -10,7 +10,7 @@ func InitRouter() *gin.Engine {
 	apiv1 := r.Group("/api/v1")
 	apiv1.Use()
 	{
-		apiv1.POST("/verificationKey/", v1.GenerateKey)
+		apiv1.POST("/generateKey/", v1.GenerateKey)
 	}
 	return r
 }
