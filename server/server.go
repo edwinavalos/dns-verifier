@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func NewServer(appConfig *config.Config, verifications *sync.Map) *http.Server {
+func NewServer(appConfig *config.Config, verifications sync.Map) *http.Server {
 	verification_service.SvConfig = appConfig
 	verification_service.VerificationMap = verifications
 	routes := routers.InitRouter()

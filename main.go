@@ -7,14 +7,12 @@ import (
 	"dnsVerifier/service/verification_service"
 	"dnsVerifier/utils"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"net/url"
-	"sync"
-
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	"net/url"
 )
 
 func main() {
@@ -53,18 +51,20 @@ func main() {
 	awsS3Client := s3.NewFromConfig(cfg)
 	appConfig.Aws.S3Client = awsS3Client
 
-	var verifications *sync.Map
-	verifications, err = utils.GetOrCreateVerificationFile(cCtx, appConfig)
+	verifications, err := utils.GetOrCreateVerificationFile(cCtx, appConfig)
 	if err != nil {
 		log.Panic().Msgf("unable to get verification_service file from s3")
 		panic(err)
 	}
 	fmt.Printf("verifications: %+v", utils.SyncMap2Map(verifications))
-	testDomain, err := url.Parse("http://test.com")
+	testDomain, err := url.Parse("http://edwinavalos.com")
 	if err != nil {
 		panic(err)
 	}
-	verifications.Store("test", verification_service.Verification{DomainName: testDomain})
+	actual, loaded := verifications.LoadOrStore("test", verification_service.Verification{DomainName: testDomain})
+	if loaded {
+		log.Info().Msgf("loaded: %t, actual: %+v", loaded, actual)
+	}
 	srv := server.NewServer(appConfig, verifications)
 	srv.ListenAndServe()
 }

@@ -15,7 +15,7 @@ import (
 )
 
 var SvConfig *config.Config
-var VerificationMap *sync.Map
+var VerificationMap sync.Map
 
 type Verification struct {
 	DomainName      *url.URL

@@ -17,12 +17,10 @@ import (
 
 func SyncMap2Map(syncMap *sync.Map) map[string]interface{} {
 	regMap := make(map[string]interface{})
-	if syncMap != nil {
-		syncMap.Range(func(k interface{}, v interface{}) bool {
-			regMap[k.(string)] = v
-			return true
-		})
-	}
+	syncMap.Range(func(k interface{}, v interface{}) bool {
+		regMap[k.(string)] = v
+		return true
+	})
 
 	return regMap
 }
