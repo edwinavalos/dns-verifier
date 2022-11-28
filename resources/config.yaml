@@ -4,5 +4,5 @@ aws:
   verificationFileName: verification.json
 app:
   verificationTxtRecordName: "mastodon_ownership_key"
-  alwaysRecreate: true
+  alwaysRecreate: false
 

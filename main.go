@@ -12,7 +12,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	"net/url"
 )
 
 func main() {
@@ -50,21 +49,15 @@ func main() {
 
 	awsS3Client := s3.NewFromConfig(cfg)
 	appConfig.Aws.S3Client = awsS3Client
+	verification_service.SvConfig = appConfig
 
-	verifications, err := utils.GetOrCreateVerificationFile(cCtx, appConfig)
+	verifications, err := verification_service.GetOrCreateVerificationFile(cCtx)
 	if err != nil {
-		log.Panic().Msgf("unable to get verification_service file from s3")
+		log.Panic().Msgf("unable to get verification file from s3")
 		panic(err)
 	}
-	fmt.Printf("verifications: %+v", utils.SyncMap2Map(verifications))
-	testDomain, err := url.Parse("http://edwinavalos.com")
-	if err != nil {
-		panic(err)
-	}
-	actual, loaded := verifications.LoadOrStore("test", verification_service.Verification{DomainName: testDomain})
-	if loaded {
-		log.Info().Msgf("loaded: %t, actual: %+v", loaded, actual)
-	}
-	srv := server.NewServer(appConfig, verifications)
+	log.Debug().Msgf("verifications: %+v\n", utils.SyncMap2Map(verifications))
+
+	srv := server.NewServer(verifications)
 	srv.ListenAndServe()
 }

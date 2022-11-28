@@ -1,7 +1,6 @@
 package server
 
 import (
-	"dnsVerifier/config"
 	"dnsVerifier/routers"
 	"dnsVerifier/service/verification_service"
 	"net/http"
@@ -9,8 +8,7 @@ import (
 	"time"
 )
 
-func NewServer(appConfig *config.Config, verifications sync.Map) *http.Server {
-	verification_service.SvConfig = appConfig
+func NewServer(verifications *sync.Map) *http.Server {
 	verification_service.VerificationMap = verifications
 	routes := routers.InitRouter()
 	return &http.Server{
