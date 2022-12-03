@@ -33,27 +33,26 @@ type Verification struct {
 
 func (v *Verification) VerifyDomain(ctx context.Context) (bool, error) {
 
-	txtRecords, err := net.LookupTXT(v.DomainName.Host)
+	txtRecords, err := net.LookupTXT(v.DomainName.Path)
 	if err != nil {
 		return false, err
 	}
 
 	log.Debug().Msgf("txtRecords: %+v", txtRecords)
-
+	log.Debug().Msgf("trying to find: %s;%s;%s", SvConfig.App.VerificationTxtRecordName, v.DomainName.Path, v.VerificationKey)
 	for _, txt := range txtRecords {
-		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, v.DomainName.Host, v.VerificationKey) {
+		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, v.DomainName.Path, v.VerificationKey) {
 			log.Info().Msgf("found key: %s", txt)
 			return true, nil
 		}
 		log.Info().Msgf("record: %s, on %s", txt, v.DomainName)
-		return false, nil
 	}
 
 	return false, nil
 }
 
 func (v *Verification) SaveVerification(ctx context.Context) error {
-	VerificationMap.Store(v.DomainName.Host, &v)
+	VerificationMap.Store(v.DomainName.Path, v)
 
 	err := SaveVerificationFile(ctx, VerificationMap)
 	if err != nil {
@@ -141,7 +140,7 @@ func PopulateVerifications(syncMap *sync.Map, output *s3.GetObjectOutput) error 
 	}
 
 	for _, k := range regMap {
-		syncMap.Store(k.DomainName.Host, k)
+		syncMap.Store(k.DomainName.Path, k)
 	}
 
 	return nil

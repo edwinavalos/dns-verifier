@@ -50,6 +50,7 @@ func GenerateKey(c *gin.Context) {
 	domainName, err := url.Parse(newKeyRequest.DomainName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
 	}
 	verification := verification_service.Verification{
 		DomainName:      domainName,
@@ -63,11 +64,13 @@ func GenerateKey(c *gin.Context) {
 	err = verification.SaveVerification(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
 	}
 
 	err = verification_service.SaveVerificationFile(c, verification_service.VerificationMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
 	}
 	response := generateKeyResponse{
 		VerificationKey: verification.VerificationKey,
@@ -90,11 +93,13 @@ func DeleteVerification(c *gin.Context) {
 	_, loaded := verification_service.VerificationMap.LoadAndDelete(newDeleteVerificationRequest.DomainName)
 	if !loaded {
 		c.JSON(http.StatusNotFound, gin.H{"error": "domain verification was not present"})
+		return
 	}
 
 	err := verification_service.SaveVerificationFile(c, verification_service.VerificationMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{})
@@ -109,18 +114,23 @@ func VerifyDomain(c *gin.Context) {
 	domainName, err := url.Parse(newVerifyDomainRequest.DomainName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
 	}
-	val, ok := verification_service.VerificationMap.Load(domainName.Host)
+
+	val, ok := verification_service.VerificationMap.Load(domainName.Path)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "could not find requested domainName in database"})
+		return
 	}
-	verification, ok := val.(verification_service.Verification)
+	verification, ok := val.(*verification_service.Verification)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to convert db value to verification"})
+		return
 	}
 	result, err := verification.VerifyDomain(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("unable to verify domain: %s", err)})
+		return
 	}
 
 	if verification.Verified != result {
@@ -128,11 +138,12 @@ func VerifyDomain(c *gin.Context) {
 		err := verification.SaveVerification(c)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
 		}
 	}
 
 	c.JSON(http.StatusOK, verifyDomainResponse{
-		DomainName: verification.DomainName.Host,
+		DomainName: verification.DomainName.Path,
 		Status:     result,
 	})
 
@@ -166,6 +177,7 @@ func VerifyDomains(c *gin.Context) {
 	err := verification_service.SaveVerificationFile(c, verification_service.VerificationMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
 	}
 
 	c.JSON(http.StatusOK, response)
