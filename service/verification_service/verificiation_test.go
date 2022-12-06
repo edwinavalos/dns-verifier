@@ -18,7 +18,7 @@ func TestVerifyDomain(t *testing.T) {
 	ctx := context.Background()
 	type args struct {
 		ctx          context.Context
-		verification Verification
+		verification DomainInformation
 		config       *config.Config
 		shouldVerify bool
 	}
@@ -30,7 +30,7 @@ func TestVerifyDomain(t *testing.T) {
 		name: "edwinavalos.com should verify on test verification record",
 		args: args{
 			ctx: ctx,
-			verification: Verification{
+			verification: DomainInformation{
 				DomainName:      edwinavalosDomainName,
 				VerificationKey: "111122223333",
 				Verified:        false,
@@ -54,7 +54,7 @@ func TestVerifyDomain(t *testing.T) {
 			name: "edwianvalos.com should fail to verify for wrong verification key",
 			args: args{
 				ctx: nil,
-				verification: Verification{
+				verification: DomainInformation{
 					DomainName:      edwinavalosDomainName,
 					VerificationKey: "333322221111",
 					Verified:        false,
@@ -78,12 +78,12 @@ func TestVerifyDomain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			SvConfig = tt.args.config
-			verified, err := tt.args.verification.VerifyDomain(tt.args.ctx)
+			verified, err := tt.args.verification.VerifyOwnership(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("VerifyDomain() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("VerifyOwnership() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if verified != tt.args.shouldVerify {
-				t.Errorf("VerifyDomain() verified = %t, shouldVerify %t", verified, tt.args.shouldVerify)
+				t.Errorf("VerifyOwnership() verified = %t, shouldVerify %t", verified, tt.args.shouldVerify)
 			}
 		})
 	}

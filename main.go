@@ -51,7 +51,7 @@ func main() {
 	appConfig.Aws.S3Client = awsS3Client
 	verification_service.SvConfig = appConfig
 
-	verifications, err := verification_service.GetOrCreateVerificationFile(cCtx)
+	verifications, err := verification_service.GetOrCreateDomainInformationFile(cCtx)
 	if err != nil {
 		log.Panic().Msgf("unable to get verification file from s3")
 		panic(err)

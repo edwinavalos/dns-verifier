@@ -22,18 +22,24 @@ import (
 var SvConfig *config.Config
 var VerificationMap *sync.Map
 
-type Verification struct {
+type Delegations struct {
+	ARecords []string
+	CNames   []string
+}
+type DomainInformation struct {
 	DomainName      *url.URL
 	VerificationKey string
 	Verified        bool
+	Delegations     Delegations
 	WarningStamp    time.Time
 	ExpireStamp     time.Time
 	UserId          uuid.UUID
 }
 
-func (v *Verification) VerifyDomain(ctx context.Context) (bool, error) {
+// VerifyOwnership checks the TXT record for our verification string we give people
+func (di *DomainInformation) VerifyOwnership(ctx context.Context) (bool, error) {
 
-	txtRecords, err := net.LookupTXT(v.DomainName.Host)
+	txtRecords, err := net.LookupTXT(di.DomainName.Host)
 	if err != nil {
 		return false, err
 	}
@@ -41,21 +47,75 @@ func (v *Verification) VerifyDomain(ctx context.Context) (bool, error) {
 	log.Debug().Msgf("txtRecords: %+v", txtRecords)
 
 	for _, txt := range txtRecords {
-		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, v.DomainName.Host, v.VerificationKey) {
+		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName.Host, di.VerificationKey) {
 			log.Info().Msgf("found key: %s", txt)
 			return true, nil
 		}
-		log.Info().Msgf("record: %s, on %s", txt, v.DomainName)
+		log.Debug().Msgf("record: %s, on %s", txt, di.DomainName)
 		return false, nil
 	}
 
 	return false, nil
 }
 
-func (v *Verification) SaveVerification(ctx context.Context) error {
-	VerificationMap.Store(v.DomainName.Host, &v)
+func contains[T comparable](elems []T, v T) bool {
+	for _, s := range elems {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
 
-	err := SaveVerificationFile(ctx, VerificationMap)
+func (di *DomainInformation) VerifyARecord(ctx context.Context) (bool, error) {
+
+	aRecords, err := net.LookupHost(di.DomainName.Host)
+	if err != nil {
+		return false, err
+	}
+
+	// This might need to become that all A records are pointing at us, which might be the correct thing to do
+	for _, record := range aRecords {
+		if contains(SvConfig.Network.OwnedHosts, record) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (di *DomainInformation) VerifyCNAME(ctx context.Context) (bool, error) {
+
+	cname, err := net.LookupCNAME(di.DomainName.Host)
+	if err != nil {
+		return false, err
+	}
+
+	if contains(SvConfig.Network.OwnedHosts, cname) {
+		return true, err
+	}
+
+	return false, nil
+}
+
+func (di *DomainInformation) LoadOrStoreDomainInformation(ctx context.Context) (*DomainInformation, bool, error) {
+	actual, loaded := VerificationMap.LoadOrStore(di.DomainName.Host, &di)
+	if !loaded {
+		return di, false, nil
+	}
+
+	actualVal, ok := actual.(*DomainInformation)
+	if !ok {
+		return nil, false, fmt.Errorf("unable to cast stored value to DomainInformation")
+	}
+
+	return actualVal, true, nil
+}
+
+func (di *DomainInformation) SaveDomainInformation(ctx context.Context) error {
+	VerificationMap.Store(di.DomainName.Host, &di)
+
+	err := SaveDomainInformationFile(ctx, VerificationMap)
 	if err != nil {
 		return err
 	}
@@ -63,7 +123,7 @@ func (v *Verification) SaveVerification(ctx context.Context) error {
 	return nil
 }
 
-func SaveVerificationFile(ctx context.Context, verifications *sync.Map) error {
+func SaveDomainInformationFile(ctx context.Context, verifications *sync.Map) error {
 	verificationFileName := SvConfig.Aws.VerificationFileName
 	log.Debug().Msgf("creating verification file at s3://%s/%s", SvConfig.Aws.BucketName, SvConfig.Aws.VerificationFileName)
 	jsonMap := utils.SyncMap2Map(verifications)
@@ -94,8 +154,7 @@ func SaveVerificationFile(ctx context.Context, verifications *sync.Map) error {
 	return nil
 }
 
-func GetOrCreateVerificationFile(ctx context.Context) (*sync.Map, error) {
-
+func GetOrCreateDomainInformationFile(ctx context.Context) (*sync.Map, error) {
 	var verifications sync.Map
 	createFile := false
 	getObjectOutput, err := SvConfig.Aws.S3Client.GetObject(ctx, &s3.GetObjectInput{
@@ -115,7 +174,7 @@ func GetOrCreateVerificationFile(ctx context.Context) (*sync.Map, error) {
 		}
 	}
 	if createFile || SvConfig.App.AlwaysRecreate {
-		err2 := SaveVerificationFile(ctx, &verifications)
+		err2 := SaveDomainInformationFile(ctx, &verifications)
 		if err2 != nil {
 			return &verifications, err2
 		}
@@ -134,7 +193,7 @@ func GetOrCreateVerificationFile(ctx context.Context) (*sync.Map, error) {
 }
 
 func PopulateVerifications(syncMap *sync.Map, output *s3.GetObjectOutput) error {
-	regMap := map[string]Verification{}
+	regMap := map[string]DomainInformation{}
 	err := json.NewDecoder(output.Body).Decode(&regMap)
 	if err != nil {
 		return err

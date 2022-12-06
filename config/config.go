@@ -19,9 +19,15 @@ type AppSettings struct {
 	AlwaysRecreate            bool
 }
 
+type NetworkSettings struct {
+	OwnedHosts  []string // Could be a net.url, but do we need to be fancy?
+	OwnedCnames []string
+}
+
 type Config struct {
 	Aws        AWSSettings
 	App        AppSettings
+	Network    NetworkSettings
 	RootCancel context.CancelFunc
 	RootCtx    context.Context
 }
@@ -32,6 +38,8 @@ func (c *Config) ReadConfig() *Config {
 	c.Aws.VerificationFileName = viper.GetString("aws.verificationFileName")
 	c.App.VerificationTxtRecordName = viper.GetString("app.verificationTxtRecordName")
 	c.App.AlwaysRecreate = viper.GetBool("app.alwaysRecreate")
+	c.Network.OwnedHosts = viper.GetStringSlice("network.owned_hosts")
+	c.Network.OwnedCnames = viper.GetStringSlice("network.owned_hosts")
 	return c
 }
 
@@ -45,6 +53,11 @@ func NewConfig() *Config {
 		App: AppSettings{
 			VerificationTxtRecordName: "mastodon_ownership_key",
 		},
-		RootCtx: nil,
+		Network: NetworkSettings{
+			OwnedHosts:  []string{"0.0.0.0"},
+			OwnedCnames: []string{"edwinavalos.com"},
+		},
+		RootCancel: nil,
+		RootCtx:    nil,
 	}
 }
