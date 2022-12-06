@@ -4,16 +4,12 @@ import (
 	"context"
 	"dnsVerifier/config"
 	"github.com/google/uuid"
-	"net/url"
 	"testing"
 	"time"
 )
 
 func TestVerifyDomain(t *testing.T) {
-	edwinavalosDomainName, err := url.Parse("https://edwinavalos.com")
-	if err != nil {
-		t.Fatalf("unable to make domain name: %s", err)
-	}
+	edwinavalosDomainName := "edwinavalos.com"
 
 	ctx := context.Background()
 	type args struct {
@@ -51,7 +47,7 @@ func TestVerifyDomain(t *testing.T) {
 		wantErr: false,
 	},
 		{
-			name: "edwianvalos.com should fail to verify for wrong verification key",
+			name: "edwinavalos.com should fail to verify for wrong verification key",
 			args: args{
 				ctx: nil,
 				verification: DomainInformation{

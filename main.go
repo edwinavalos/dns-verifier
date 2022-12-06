@@ -12,10 +12,12 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	"math/rand"
+	"time"
 )
 
 func main() {
-
+	rand.Seed(time.Now().Unix())
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	rootCtx := context.Background()
 

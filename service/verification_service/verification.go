@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"net"
-	"net/url"
 	"os"
 	"sync"
 
@@ -27,7 +26,7 @@ type Delegations struct {
 	CNames   []string
 }
 type DomainInformation struct {
-	DomainName      *url.URL
+	DomainName      string
 	VerificationKey string
 	Verified        bool
 	Delegations     Delegations
@@ -39,20 +38,19 @@ type DomainInformation struct {
 // VerifyOwnership checks the TXT record for our verification string we give people
 func (di *DomainInformation) VerifyOwnership(ctx context.Context) (bool, error) {
 
-	txtRecords, err := net.LookupTXT(di.DomainName.Host)
+	txtRecords, err := net.LookupTXT(di.DomainName)
 	if err != nil {
 		return false, err
 	}
 
 	log.Debug().Msgf("txtRecords: %+v", txtRecords)
-
+	log.Debug().Msgf("trying to find: %s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.VerificationKey)
 	for _, txt := range txtRecords {
-		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName.Host, di.VerificationKey) {
+		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.VerificationKey) {
 			log.Info().Msgf("found key: %s", txt)
 			return true, nil
 		}
 		log.Debug().Msgf("record: %s, on %s", txt, di.DomainName)
-		return false, nil
 	}
 
 	return false, nil
@@ -69,7 +67,7 @@ func contains[T comparable](elems []T, v T) bool {
 
 func (di *DomainInformation) VerifyARecord(ctx context.Context) (bool, error) {
 
-	aRecords, err := net.LookupHost(di.DomainName.Host)
+	aRecords, err := net.LookupHost(di.DomainName)
 	if err != nil {
 		return false, err
 	}
@@ -86,7 +84,7 @@ func (di *DomainInformation) VerifyARecord(ctx context.Context) (bool, error) {
 
 func (di *DomainInformation) VerifyCNAME(ctx context.Context) (bool, error) {
 
-	cname, err := net.LookupCNAME(di.DomainName.Host)
+	cname, err := net.LookupCNAME(di.DomainName)
 	if err != nil {
 		return false, err
 	}
@@ -98,22 +96,30 @@ func (di *DomainInformation) VerifyCNAME(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-func (di *DomainInformation) LoadOrStoreDomainInformation(ctx context.Context) (*DomainInformation, bool, error) {
-	actual, loaded := VerificationMap.LoadOrStore(di.DomainName.Host, &di)
+func (di *DomainInformation) LoadOrStore(ctx context.Context) (*DomainInformation, bool, error) {
+	value, loaded := VerificationMap.LoadOrStore(di.DomainName, &di)
 	if !loaded {
 		return di, false, nil
 	}
 
-	actualVal, ok := actual.(*DomainInformation)
+	actualVal, ok := value.(DomainInformation)
 	if !ok {
 		return nil, false, fmt.Errorf("unable to cast stored value to DomainInformation")
 	}
 
-	return actualVal, true, nil
+	return &actualVal, true, nil
+}
+
+func (di *DomainInformation) LoadAndDelete(ctx context.Context) (bool, error) {
+	_, loaded := VerificationMap.LoadAndDelete(di.DomainName)
+	if !loaded {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (di *DomainInformation) SaveDomainInformation(ctx context.Context) error {
-	VerificationMap.Store(di.DomainName.Host, &di)
+	VerificationMap.Store(di.DomainName, &di)
 
 	err := SaveDomainInformationFile(ctx, VerificationMap)
 	if err != nil {
@@ -200,7 +206,7 @@ func PopulateVerifications(syncMap *sync.Map, output *s3.GetObjectOutput) error 
 	}
 
 	for _, k := range regMap {
-		syncMap.Store(k.DomainName.Host, k)
+		syncMap.Store(k.DomainName, k)
 	}
 
 	return nil
