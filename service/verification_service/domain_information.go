@@ -97,17 +97,31 @@ func (di *DomainInformation) VerifyCNAME(ctx context.Context) (bool, error) {
 }
 
 func (di *DomainInformation) LoadOrStore(ctx context.Context) (*DomainInformation, bool, error) {
-	value, loaded := VerificationMap.LoadOrStore(di.DomainName, &di)
+	value, loaded := VerificationMap.LoadOrStore(di.DomainName, di)
 	if !loaded {
 		return di, false, nil
 	}
 
-	actualVal, ok := value.(DomainInformation)
+	actualValue, ok := value.(DomainInformation)
 	if !ok {
 		return nil, false, fmt.Errorf("unable to cast stored value to DomainInformation")
 	}
 
-	return &actualVal, true, nil
+	return &actualValue, true, nil
+}
+
+func (di *DomainInformation) Load(ctx context.Context) (*DomainInformation, error) {
+	value, ok := VerificationMap.Load(di.DomainName)
+	if !ok {
+		return di, fmt.Errorf("unable to find %s in verification map", di.DomainName)
+	}
+
+	actualValue, ok := value.(DomainInformation)
+	if !ok {
+		return nil, fmt.Errorf("unable to convert map value of key: %s to DomainInformation", di.DomainName)
+	}
+
+	return &actualValue, nil
 }
 
 func (di *DomainInformation) LoadAndDelete(ctx context.Context) (bool, error) {

@@ -8,15 +8,13 @@ import (
 	"github.com/google/uuid"
 	"net/http"
 	"net/url"
-	"time"
 )
 
-type generateKeyRequest struct {
-	DomainName string    `json:"domain_name"`
-	UserId     uuid.UUID `json:"user_id"`
+type generateOwnershipKeyRequest struct {
+	DomainName string `json:"domain_name"`
 }
 
-type generateKeyResponse struct {
+type generateOwnershipKeyResponse struct {
 	VerificationKey string   `json:"verification_key"`
 	DomainName      *url.URL `json:"domain_name"`
 }
@@ -46,6 +44,27 @@ type deleteVerificationRequest struct {
 //
 //	there isnt other information. StoreOrLoad probably is what I want here.
 func GenerateOwnershipKey(c *gin.Context) {
+	newGenerateOwnershipKeyReq := generateOwnershipKeyRequest{}
+	err := c.BindJSON(&newGenerateOwnershipKeyReq)
+	if err != nil {
+		return
+	}
+
+	di := verification_service.DomainInformation{DomainName: newGenerateOwnershipKeyReq.DomainName}
+
+	loadedDi, err := di.Load(c)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("unable to find domain name: %s in verification map err was: %s", newGenerateOwnershipKeyReq.DomainName, err)})
+		return
+	}
+
+	di.VerificationKey = utils.RandomString(30)
+
+	err = loadedDi.SaveDomainInformation(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
 
 	return
 }
@@ -172,19 +191,10 @@ func CreateDomainInformation(c *gin.Context) {
 	}
 
 	domainInformation := verification_service.DomainInformation{
-		DomainName:      newCreateDomainInformationReq.DomainName,
-		VerificationKey: utils.RandomString(30),
-		Verified:        false,
-		Delegations: verification_service.Delegations{
-			ARecords: nil,
-			CNames:   nil,
-		},
-		WarningStamp: time.Time{},
-		ExpireStamp:  time.Now().Add(24 * time.Hour),
-		UserId:       newCreateDomainInformationReq.UserId,
+		DomainName: newCreateDomainInformationReq.DomainName,
 	}
 
-	_, loaded, err := domainInformation.LoadOrStore(c)
+	loadedDi, loaded, err := domainInformation.LoadOrStore(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
@@ -194,7 +204,7 @@ func CreateDomainInformation(c *gin.Context) {
 		return
 	}
 
-	err = verification_service.SaveDomainInformationFile(c, verification_service.VerificationMap)
+	err = loadedDi.SaveDomainInformation(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
@@ -223,6 +233,12 @@ func DeleteDomainInformation(c *gin.Context) {
 
 	if !loaded {
 		c.JSON(http.StatusNotFound, gin.H{"error": "value was not in verification map, check name?"})
+		return
+	}
+
+	err = verification_service.SaveDomainInformationFile(c, verification_service.VerificationMap)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
