@@ -24,7 +24,7 @@ import (
 func TestAllOfIt(t *testing.T) {
 
 	// Configure the application
-	domainName := "edwinavalos.com"
+	domainName := "test.edwinavalos.com"
 
 	viper.SetConfigName("config-test")
 	viper.SetConfigType("yaml")
@@ -142,5 +142,6 @@ func TestAllOfIt(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, w.Code, http.StatusOK)
+	// need to write one that does CNames with another name loaded in to the di object
 
 }

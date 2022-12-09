@@ -98,7 +98,7 @@ func (di *DomainInformation) VerifyCNAME(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	if contains(SvConfig.Network.OwnedHosts, cname) {
+	if contains(SvConfig.Network.OwnedCnames, cname) {
 		return true, err
 	}
 

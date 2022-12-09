@@ -267,6 +267,7 @@ func VerifyDelegation(c *gin.Context) {
 	loadedDi, err := di.Load(c)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err})
+		return
 	}
 
 	var verified bool
