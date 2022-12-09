@@ -20,9 +20,7 @@ func InitRouter() *gin.Engine {
 		apiv1.POST("/domains/verify", v1.VerifyDomains)
 		apiv1.GET("/domains", v1.GetDomainInformation)
 
-		//apiv1.POST("/domain/delegation", v1.CreateDelegation)
-		//apiv1.POST("/domains/delegation", v1.VerifyDelegation)
-		//apiv1.DELETE("/domains/delegation", v1.DeleteDelegation)
+		apiv1.POST("/domain/delegation", v1.VerifyDelegation)
 		//apiv1.GET("/domains/delegations", v1.GetDelegations)
 
 	}

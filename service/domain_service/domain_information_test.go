@@ -1,4 +1,4 @@
-package verification_service
+package domain_service
 
 import (
 	"context"
@@ -28,7 +28,8 @@ func TestVerifyDomain(t *testing.T) {
 			ctx: ctx,
 			verification: DomainInformation{
 				DomainName: edwinavalosDomainName,
-				Verification: Verification{VerificationKey: "111122223333",
+				Verification: Verification{
+					VerificationKey:          "111122223333",
 					Verified:                 false,
 					VerificationWarningStamp: time.Time{},
 					VerificationExpireStamp:  time.Time{},
@@ -53,7 +54,8 @@ func TestVerifyDomain(t *testing.T) {
 				ctx: nil,
 				verification: DomainInformation{
 					DomainName: edwinavalosDomainName,
-					Verification: Verification{VerificationKey: "333322221111",
+					Verification: Verification{
+						VerificationKey:          "333322221111",
 						Verified:                 false,
 						VerificationWarningStamp: time.Time{},
 						VerificationExpireStamp:  time.Time{},

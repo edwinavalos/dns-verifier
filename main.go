@@ -4,7 +4,7 @@ import (
 	"context"
 	"dnsVerifier/config"
 	"dnsVerifier/server"
-	"dnsVerifier/service/verification_service"
+	"dnsVerifier/service/domain_service"
 	"dnsVerifier/utils"
 	"fmt"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
@@ -38,7 +38,7 @@ func main() {
 	appConfig.ReadConfig()
 
 	if appConfig.Aws.BucketName == "" || appConfig.Aws.VerificationFileName == "" {
-		log.Fatal().Msgf("did not have enough information to get or create verification_service file")
+		log.Fatal().Msgf("did not have enough information to get or create domain_service file")
 		log.Debug().Msgf("bucketName: {%s}, verificationFileName {%s}", appConfig.Aws.BucketName, appConfig.Aws.VerificationFileName)
 		panic(fmt.Errorf("missing aws configuration"))
 	}
@@ -51,9 +51,9 @@ func main() {
 
 	awsS3Client := s3.NewFromConfig(cfg)
 	appConfig.Aws.S3Client = awsS3Client
-	verification_service.SvConfig = appConfig
+	domain_service.SvConfig = appConfig
 
-	verifications, err := verification_service.GetOrCreateDomainInformationFile(cCtx)
+	verifications, err := domain_service.GetOrCreateDomainInformationFile(cCtx)
 	if err != nil {
 		log.Panic().Msgf("unable to get verification file from s3")
 		panic(err)

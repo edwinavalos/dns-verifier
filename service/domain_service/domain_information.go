@@ -1,4 +1,4 @@
-package verification_service
+package domain_service
 
 import (
 	"context"

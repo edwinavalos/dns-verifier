@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"dnsVerifier/service/verification_service"
+	"dnsVerifier/service/domain_service"
 	"dnsVerifier/utils"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -10,20 +10,20 @@ import (
 	"net/url"
 )
 
-type generateOwnershipKeyRequest struct {
+type GenerateOwnershipKeyReq struct {
 	DomainName string `json:"domain_name"`
 }
 
-type generateOwnershipKeyResponse struct {
+type GenerateOwnershipKeyResp struct {
 	VerificationKey string   `json:"verification_key"`
 	DomainName      *url.URL `json:"domain_name"`
 }
 
-type verifyDomainRequest struct {
+type VerifyDomainReq struct {
 	DomainName string `json:"domain_name"`
 }
 
-type verifyDomainResponse struct {
+type VerifyDomainResp struct {
 	DomainName string `json:"domain_name"`
 	Status     bool   `json:"status"`
 }
@@ -33,23 +33,36 @@ type DomainVerificationResult struct {
 	Status     bool   `json:"status"`
 }
 
-type verifyDomainsResponse map[string]DomainVerificationResult
+type VerifyDomainsResponse map[string]DomainVerificationResult
 
-type deleteVerificationRequest struct {
+type DeleteVerificationRequest struct {
 	DomainName string `json:"domain_name"`
+}
+
+type CreateDomainInformationReq struct {
+	DomainName string    `json:"domain_name"`
+	UserId     uuid.UUID `json:"user_id"`
+}
+
+type DeleteDomainInformationReq struct {
+	DomainName string `json:"domain_name"`
+}
+
+func GetDomainInformation(c *gin.Context) {
+	c.JSON(http.StatusOK, utils.SyncMap2Map(domain_service.VerificationMap))
 }
 
 // GenerateOwnershipKey
 // TODO: This behavior of wiping out the verification is probably too stronk, need to make it only create one if
 //	there isn't other information. StoreOrLoad probably is what I want here.
 func GenerateOwnershipKey(c *gin.Context) {
-	newGenerateOwnershipKeyReq := generateOwnershipKeyRequest{}
+	var newGenerateOwnershipKeyReq = GenerateOwnershipKeyReq{}
 	err := c.BindJSON(&newGenerateOwnershipKeyReq)
 	if err != nil {
 		return
 	}
 
-	di := verification_service.DomainInformation{DomainName: newGenerateOwnershipKeyReq.DomainName}
+	di := domain_service.DomainInformation{DomainName: newGenerateOwnershipKeyReq.DomainName}
 
 	loadedDi, err := di.Load(c)
 	if err != nil {
@@ -68,22 +81,18 @@ func GenerateOwnershipKey(c *gin.Context) {
 	return
 }
 
-func GetDomainInformation(c *gin.Context) {
-	c.JSON(http.StatusOK, utils.SyncMap2Map(verification_service.VerificationMap))
-}
-
 func DeleteVerification(c *gin.Context) {
-	newDeleteVerificationRequest := deleteVerificationRequest{}
+	var newDeleteVerificationRequest = DeleteVerificationRequest{}
 	if err := c.BindJSON(&newDeleteVerificationRequest); err != nil {
 		return
 	}
-	_, loaded := verification_service.VerificationMap.LoadAndDelete(newDeleteVerificationRequest.DomainName)
+	_, loaded := domain_service.VerificationMap.LoadAndDelete(newDeleteVerificationRequest.DomainName)
 	if !loaded {
 		c.JSON(http.StatusNotFound, gin.H{"error": "domain verification was not present"})
 		return
 	}
 
-	err := verification_service.SaveDomainInformationFile(c, verification_service.VerificationMap)
+	err := domain_service.SaveDomainInformationFile(c, domain_service.VerificationMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
@@ -94,7 +103,7 @@ func DeleteVerification(c *gin.Context) {
 
 // VerifyOwnership only does TXT record checks
 func VerifyOwnership(c *gin.Context) {
-	var newVerifyDomainRequest verifyDomainRequest
+	var newVerifyDomainRequest VerifyDomainReq
 	if err := c.BindJSON(&newVerifyDomainRequest); err != nil {
 		return
 	}
@@ -105,12 +114,12 @@ func VerifyOwnership(c *gin.Context) {
 		return
 	}
 
-	val, ok := verification_service.VerificationMap.Load(domainName.Path)
+	val, ok := domain_service.VerificationMap.Load(domainName.Path)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "could not find requested domainName in database"})
 		return
 	}
-	verification, ok := val.(*verification_service.DomainInformation)
+	verification, ok := val.(*domain_service.DomainInformation)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to convert db value to verification"})
 		return
@@ -130,7 +139,7 @@ func VerifyOwnership(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, verifyDomainResponse{
+	c.JSON(http.StatusOK, VerifyDomainResp{
 		DomainName: verification.DomainName,
 		Status:     result,
 	})
@@ -140,9 +149,9 @@ func VerifyOwnership(c *gin.Context) {
 
 // VerifyDomains only does TXT checks for everyone
 func VerifyDomains(c *gin.Context) {
-	response := verifyDomainsResponse{}
-	verification_service.VerificationMap.Range(func(k interface{}, v interface{}) bool {
-		verification, ok := v.(verification_service.DomainInformation)
+	var response = VerifyDomainsResponse{}
+	domain_service.VerificationMap.Range(func(k interface{}, v interface{}) bool {
+		verification, ok := v.(domain_service.DomainInformation)
 		if !ok {
 			return false
 		}
@@ -159,11 +168,11 @@ func VerifyDomains(c *gin.Context) {
 			Status:     result,
 		}
 		verification.Verification.Verified = result
-		verification_service.VerificationMap.Store(key, verification)
+		domain_service.VerificationMap.Store(key, verification)
 		return true
 	})
 
-	err := verification_service.SaveDomainInformationFile(c, verification_service.VerificationMap)
+	err := domain_service.SaveDomainInformationFile(c, domain_service.VerificationMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
@@ -173,23 +182,17 @@ func VerifyDomains(c *gin.Context) {
 	return
 }
 
-type createDomainInformationReq struct {
-	DomainName string    `json:"domain_name"`
-	UserId     uuid.UUID `json:"user_id"`
-}
-
 // CreateDomainInformation will create domain information if not present in VerificationMap
 // if it is present, we return 202 and move on with our lives
 func CreateDomainInformation(c *gin.Context) {
-
-	newCreateDomainInformationReq := createDomainInformationReq{}
+	var newCreateDomainInformationReq = CreateDomainInformationReq{}
 	err := c.BindJSON(&newCreateDomainInformationReq)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
-	domainInformation := verification_service.DomainInformation{
+	domainInformation := domain_service.DomainInformation{
 		DomainName: newCreateDomainInformationReq.DomainName,
 	}
 
@@ -212,17 +215,13 @@ func CreateDomainInformation(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{})
 }
 
-type deleteDomainInformationReq struct {
-	DomainName string `json:"domain_name"`
-}
-
 func DeleteDomainInformation(c *gin.Context) {
-	var newDeleteDomainInformationReq deleteDomainInformationReq
+	var newDeleteDomainInformationReq DeleteDomainInformationReq
 	if err := c.Bind(&newDeleteDomainInformationReq); err != nil {
 		return
 	}
 
-	di := verification_service.DomainInformation{DomainName: newDeleteDomainInformationReq.DomainName}
+	di := domain_service.DomainInformation{DomainName: newDeleteDomainInformationReq.DomainName}
 
 	loaded, err := di.LoadAndDelete(c)
 	if err != nil {
@@ -235,7 +234,7 @@ func DeleteDomainInformation(c *gin.Context) {
 		return
 	}
 
-	err = verification_service.SaveDomainInformationFile(c, verification_service.VerificationMap)
+	err = domain_service.SaveDomainInformationFile(c, domain_service.VerificationMap)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
@@ -243,4 +242,49 @@ func DeleteDomainInformation(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("%s deleted", di.DomainName)})
 	return
+}
+
+type Record string
+
+const (
+	ARecord = "arecord"
+	CName   = "cname"
+)
+
+type VerifyDelegationReq struct {
+	DomainName string `json:"domain_name"`
+	Type       Record `json:"type"`
+}
+
+func VerifyDelegation(c *gin.Context) {
+	var newCreateDelegationRequest VerifyDelegationReq
+	err := c.BindJSON(&newCreateDelegationRequest)
+	if err != nil {
+		return
+	}
+
+	di := domain_service.DomainInformation{DomainName: newCreateDelegationRequest.DomainName}
+	loadedDi, err := di.Load(c)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err})
+	}
+
+	var verified bool
+	switch newCreateDelegationRequest.Type {
+	case ARecord:
+		verified, err = loadedDi.VerifyARecord(c)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+	case CName:
+		verified, err = loadedDi.VerifyCNAME(c)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"verified": verified})
+
 }

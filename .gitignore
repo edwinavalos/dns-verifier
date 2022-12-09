@@ -1,3 +1,4 @@
 vendor
-/domain_information.json
+*domain_information.json
 verification.json
+*domain_information_test.json

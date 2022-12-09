@@ -7,6 +7,6 @@ app:
   alwaysRecreate: false
 network:
   owned_hosts:
-    - 34.217.225.52
+    - 34.217.225.51
   owned_cnames:
     - "spons.us"
