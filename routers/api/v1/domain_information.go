@@ -41,8 +41,7 @@ type deleteVerificationRequest struct {
 
 // GenerateOwnershipKey
 // TODO: This behavior of wiping out the verification is probably too stronk, need to make it only create one if
-//
-//	there isnt other information. StoreOrLoad probably is what I want here.
+//	there isn't other information. StoreOrLoad probably is what I want here.
 func GenerateOwnershipKey(c *gin.Context) {
 	newGenerateOwnershipKeyReq := generateOwnershipKeyRequest{}
 	err := c.BindJSON(&newGenerateOwnershipKeyReq)
@@ -58,7 +57,7 @@ func GenerateOwnershipKey(c *gin.Context) {
 		return
 	}
 
-	di.VerificationKey = utils.RandomString(30)
+	loadedDi.Verification.VerificationKey = utils.RandomString(30)
 
 	err = loadedDi.SaveDomainInformation(c)
 	if err != nil {
@@ -122,8 +121,8 @@ func VerifyOwnership(c *gin.Context) {
 		return
 	}
 
-	if verification.Verified != result {
-		verification.Verified = result
+	if verification.Verification.Verified != result {
+		verification.Verification.Verified = result
 		err := verification.SaveDomainInformation(c)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
@@ -159,7 +158,7 @@ func VerifyDomains(c *gin.Context) {
 			DomainName: key,
 			Status:     result,
 		}
-		verification.Verified = result
+		verification.Verification.Verified = result
 		verification_service.VerificationMap.Store(key, verification)
 		return true
 	})

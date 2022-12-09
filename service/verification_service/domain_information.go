@@ -22,17 +22,26 @@ var SvConfig *config.Config
 var VerificationMap *sync.Map
 
 type Delegations struct {
-	ARecords []string
-	CNames   []string
+	ARecords            []string
+	ARecordWarningStamp time.Time
+	ARecordExpireStamp  time.Time
+	CNames              []string
+	CNameWarningStamp   time.Time
+	CNameExpireStamp    time.Time
 }
+
+type Verification struct {
+	VerificationKey          string
+	Verified                 bool
+	VerificationWarningStamp time.Time
+	VerificationExpireStamp  time.Time
+}
+
 type DomainInformation struct {
-	DomainName      string
-	VerificationKey string
-	Verified        bool
-	Delegations     Delegations
-	WarningStamp    time.Time
-	ExpireStamp     time.Time
-	UserId          uuid.UUID
+	DomainName   string
+	Verification Verification
+	Delegations  Delegations
+	UserId       uuid.UUID
 }
 
 // VerifyOwnership checks the TXT record for our verification string we give people
@@ -44,9 +53,9 @@ func (di *DomainInformation) VerifyOwnership(ctx context.Context) (bool, error) 
 	}
 
 	log.Debug().Msgf("txtRecords: %+v", txtRecords)
-	log.Debug().Msgf("trying to find: %s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.VerificationKey)
+	log.Debug().Msgf("trying to find: %s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey)
 	for _, txt := range txtRecords {
-		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.VerificationKey) {
+		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey) {
 			log.Info().Msgf("found key: %s", txt)
 			return true, nil
 		}
@@ -102,12 +111,12 @@ func (di *DomainInformation) LoadOrStore(ctx context.Context) (*DomainInformatio
 		return di, false, nil
 	}
 
-	actualValue, ok := value.(DomainInformation)
+	actualValue, ok := value.(*DomainInformation)
 	if !ok {
 		return nil, false, fmt.Errorf("unable to cast stored value to DomainInformation")
 	}
 
-	return &actualValue, true, nil
+	return actualValue, true, nil
 }
 
 func (di *DomainInformation) Load(ctx context.Context) (*DomainInformation, error) {
@@ -116,12 +125,12 @@ func (di *DomainInformation) Load(ctx context.Context) (*DomainInformation, erro
 		return di, fmt.Errorf("unable to find %s in verification map", di.DomainName)
 	}
 
-	actualValue, ok := value.(DomainInformation)
+	actualValue, ok := value.(*DomainInformation)
 	if !ok {
 		return nil, fmt.Errorf("unable to convert map value of key: %s to DomainInformation", di.DomainName)
 	}
 
-	return &actualValue, nil
+	return actualValue, nil
 }
 
 func (di *DomainInformation) LoadAndDelete(ctx context.Context) (bool, error) {
@@ -133,7 +142,7 @@ func (di *DomainInformation) LoadAndDelete(ctx context.Context) (bool, error) {
 }
 
 func (di *DomainInformation) SaveDomainInformation(ctx context.Context) error {
-	VerificationMap.Store(di.DomainName, &di)
+	VerificationMap.Store(di.DomainName, di)
 
 	err := SaveDomainInformationFile(ctx, VerificationMap)
 	if err != nil {
@@ -213,7 +222,7 @@ func GetOrCreateDomainInformationFile(ctx context.Context) (*sync.Map, error) {
 }
 
 func PopulateVerifications(syncMap *sync.Map, output *s3.GetObjectOutput) error {
-	regMap := map[string]DomainInformation{}
+	regMap := map[string]*DomainInformation{}
 	err := json.NewDecoder(output.Body).Decode(&regMap)
 	if err != nil {
 		return err

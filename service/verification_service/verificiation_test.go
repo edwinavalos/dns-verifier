@@ -27,12 +27,13 @@ func TestVerifyDomain(t *testing.T) {
 		args: args{
 			ctx: ctx,
 			verification: DomainInformation{
-				DomainName:      edwinavalosDomainName,
-				VerificationKey: "111122223333",
-				Verified:        false,
-				WarningStamp:    time.Time{},
-				ExpireStamp:     time.Time{},
-				UserId:          uuid.UUID{},
+				DomainName: edwinavalosDomainName,
+				Verification: Verification{VerificationKey: "111122223333",
+					Verified:                 false,
+					VerificationWarningStamp: time.Time{},
+					VerificationExpireStamp:  time.Time{},
+				},
+				UserId: uuid.UUID{},
 			},
 			config: &config.Config{
 				Aws: config.AWSSettings{},
@@ -51,12 +52,13 @@ func TestVerifyDomain(t *testing.T) {
 			args: args{
 				ctx: nil,
 				verification: DomainInformation{
-					DomainName:      edwinavalosDomainName,
-					VerificationKey: "333322221111",
-					Verified:        false,
-					WarningStamp:    time.Time{},
-					ExpireStamp:     time.Time{},
-					UserId:          uuid.UUID{},
+					DomainName: edwinavalosDomainName,
+					Verification: Verification{VerificationKey: "333322221111",
+						Verified:                 false,
+						VerificationWarningStamp: time.Time{},
+						VerificationExpireStamp:  time.Time{},
+					},
+					UserId: uuid.UUID{},
 				},
 				config: &config.Config{
 					Aws: config.AWSSettings{},
