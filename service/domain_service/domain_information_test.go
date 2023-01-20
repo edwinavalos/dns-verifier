@@ -2,7 +2,7 @@ package domain_service
 
 import (
 	"context"
-	"dnsVerifier/config"
+	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/google/uuid"
 	"testing"
 	"time"

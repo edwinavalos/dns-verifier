@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"dnsVerifier/config"
-	"dnsVerifier/server"
-	"dnsVerifier/service/domain_service"
-	"dnsVerifier/utils"
 	"fmt"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/server"
+	"github.com/edwinavalos/dns-verifier/service/domain_service"
+	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"

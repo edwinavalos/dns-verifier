@@ -1,8 +1,8 @@
 package server
 
 import (
-	"dnsVerifier/routers"
-	"dnsVerifier/service/domain_service"
+	"github.com/edwinavalos/dns-verifier/routers"
+	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"net/http"
 	"sync"
 	"time"

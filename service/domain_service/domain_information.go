@@ -2,13 +2,13 @@ package domain_service
 
 import (
 	"context"
-	"dnsVerifier/config"
-	"dnsVerifier/utils"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"net"

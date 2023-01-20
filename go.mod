@@ -1,4 +1,4 @@
-module dnsVerifier
+module github.com/edwinavalos/dns-verifier
 
 go 1.18
 

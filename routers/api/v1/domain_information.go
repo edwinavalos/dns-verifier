@@ -1,9 +1,9 @@
 package v1
 
 import (
-	"dnsVerifier/service/domain_service"
-	"dnsVerifier/utils"
 	"fmt"
+	"github.com/edwinavalos/dns-verifier/service/domain_service"
+	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"net/http"

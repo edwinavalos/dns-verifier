@@ -1,7 +1,7 @@
 package routers
 
 import (
-	v1 "dnsVerifier/routers/api/v1"
+	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/gin-gonic/gin"
 )
 
