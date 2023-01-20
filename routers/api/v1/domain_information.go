@@ -17,6 +17,7 @@ type GenerateOwnershipKeyReq struct {
 type GenerateOwnershipKeyResp struct {
 	VerificationKey string   `json:"verification_key"`
 	DomainName      *url.URL `json:"domain_name"`
+	Error           string   `json:"error,omitempty"`
 }
 
 type VerifyDomainReq struct {
@@ -29,14 +30,15 @@ type VerifyDomainResp struct {
 	Error      string `json:"error,omitempty"`
 }
 
-type DomainVerificationResult struct {
+type DomainVerificationResp struct {
 	DomainName string `json:"domain_name"`
 	Status     bool   `json:"status"`
+	Error      string `json:"error,omitempty"`
 }
 
-type VerifyDomainsResponse map[string]DomainVerificationResult
+type VerifyDomainsResp map[string]DomainVerificationResp
 
-type DeleteVerificationRequest struct {
+type DeleteVerificationReq struct {
 	DomainName string `json:"domain_name"`
 }
 
@@ -83,7 +85,7 @@ func GenerateOwnershipKey(c *gin.Context) {
 }
 
 func DeleteVerification(c *gin.Context) {
-	var newDeleteVerificationRequest = DeleteVerificationRequest{}
+	var newDeleteVerificationRequest = DeleteVerificationReq{}
 	if err := c.BindJSON(&newDeleteVerificationRequest); err != nil {
 		return
 	}
@@ -150,7 +152,7 @@ func VerifyOwnership(c *gin.Context) {
 
 // VerifyDomains only does TXT checks for everyone
 func VerifyDomains(c *gin.Context) {
-	var response = VerifyDomainsResponse{}
+	var response = VerifyDomainsResp{}
 	domain_service.VerificationMap.Range(func(k interface{}, v interface{}) bool {
 		verification, ok := v.(domain_service.DomainInformation)
 		if !ok {
@@ -164,7 +166,7 @@ func VerifyDomains(c *gin.Context) {
 		if !ok {
 			return false
 		}
-		response[key] = DomainVerificationResult{
+		response[key] = DomainVerificationResp{
 			DomainName: key,
 			Status:     result,
 		}
