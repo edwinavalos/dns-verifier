@@ -26,6 +26,7 @@ type VerifyDomainReq struct {
 type VerifyDomainResp struct {
 	DomainName string `json:"domain_name"`
 	Status     bool   `json:"status"`
+	Error      string `json:"error,omitempty"`
 }
 
 type DomainVerificationResult struct {
