@@ -106,12 +106,13 @@ func DeleteVerification(c *gin.Context) {
 
 // VerifyOwnership only does TXT record checks
 func VerifyOwnership(c *gin.Context) {
-	var newVerifyDomainRequest VerifyDomainReq
-	if err := c.BindJSON(&newVerifyDomainRequest); err != nil {
+	domainNameParam := c.Param("domain_name")
+	if domainNameParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing domain_name url parameter"})
 		return
 	}
 
-	domainName, err := url.Parse(newVerifyDomainRequest.DomainName)
+	domainName, err := url.Parse(domainNameParam)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return

@@ -15,7 +15,7 @@ func InitRouter() *gin.Engine {
 
 		apiv1.POST("/domain/verificationKey", v1.GenerateOwnershipKey)
 		apiv1.DELETE("/domain/verification", v1.DeleteVerification)
-		apiv1.POST("/domain/verification", v1.VerifyOwnership)
+		apiv1.GET("/domain/verification", v1.VerifyOwnership)
 
 		apiv1.POST("/domains/verify", v1.VerifyDomains)
 		apiv1.GET("/domains", v1.GetDomainInformation)
