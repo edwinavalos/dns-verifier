@@ -15,13 +15,9 @@ type GenerateOwnershipKeyReq struct {
 }
 
 type GenerateOwnershipKeyResp struct {
-	VerificationKey string   `json:"verification_key"`
-	DomainName      *url.URL `json:"domain_name"`
-	Error           string   `json:"error,omitempty"`
-}
-
-type VerifyDomainReq struct {
-	DomainName string `json:"domain_name"`
+	VerificationKey string `json:"verification_key"`
+	DomainName      string `json:"domain_name"`
+	Error           string `json:"error,omitempty"`
 }
 
 type VerifyDomainResp struct {
@@ -69,7 +65,9 @@ func GenerateOwnershipKey(c *gin.Context) {
 
 	loadedDi, err := di.Load(c)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("unable to find domain name: %s in verification map err was: %s", newGenerateOwnershipKeyReq.DomainName, err)})
+		c.JSON(http.StatusNotFound, GenerateOwnershipKeyResp{
+			Error: fmt.Sprintf("unable to find domain name: %s in verification map err was: %s", newGenerateOwnershipKeyReq.DomainName, err),
+		})
 		return
 	}
 
@@ -77,10 +75,16 @@ func GenerateOwnershipKey(c *gin.Context) {
 
 	err = loadedDi.SaveDomainInformation(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, GenerateOwnershipKeyResp{
+			Error: err.Error(),
+		})
 		return
 	}
 
+	c.JSON(http.StatusOK, GenerateOwnershipKeyResp{
+		VerificationKey: loadedDi.Verification.VerificationKey,
+		DomainName:      loadedDi.DomainName,
+	})
 	return
 }
 
@@ -106,9 +110,9 @@ func DeleteVerification(c *gin.Context) {
 
 // VerifyOwnership only does TXT record checks
 func VerifyOwnership(c *gin.Context) {
-	domainNameParam := c.Param("domain_name")
+	domainNameParam := c.Query("domain_name")
 	if domainNameParam == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing domain_name url parameter"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing domain_name query parameter"})
 		return
 	}
 

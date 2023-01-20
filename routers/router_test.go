@@ -113,10 +113,8 @@ func TestAllOfIt(t *testing.T) {
 	w = httptest.NewRecorder()
 
 	// Verify that we own the domain
-	domainReq := v1.VerifyDomainReq{DomainName: domainName}
-	err = json.NewEncoder(&buf).Encode(domainReq)
 
-	req, err = http.NewRequest("POST", "/api/v1/domain/verification", &buf)
+	req, err = http.NewRequest("POST", fmt.Sprintf("/api/v1/domain/verification?domain_name=%s", domainName), &buf)
 	if err != nil {
 		t.Fatal(err)
 	}
