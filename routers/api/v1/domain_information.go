@@ -5,7 +5,6 @@ import (
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"net/http"
 	"net/url"
 )
@@ -39,8 +38,8 @@ type DeleteVerificationReq struct {
 }
 
 type CreateDomainInformationReq struct {
-	DomainName string    `json:"domain_name"`
-	UserId     uuid.UUID `json:"user_id"`
+	DomainName string `json:"domain_name"`
+	OwnerId    string `json:"owner_id"`
 }
 
 type DeleteDomainInformationReq struct {
