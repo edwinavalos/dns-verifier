@@ -2,12 +2,19 @@ package v1
 
 import (
 	"fmt"
+	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/url"
 )
+
+var svConfig *config.Config
+
+func SetConfig(conf *config.Config) {
+	svConfig = conf
+}
 
 type GenerateOwnershipKeyReq struct {
 	DomainName string `json:"domain_name"`
@@ -52,6 +59,7 @@ func GetDomainInformation(c *gin.Context) {
 
 // GenerateOwnershipKey
 // TODO: This behavior of wiping out the verification is probably too stronk, need to make it only create one if
+//
 //	there isn't other information. StoreOrLoad probably is what I want here.
 func GenerateOwnershipKey(c *gin.Context) {
 	var newGenerateOwnershipKeyReq = GenerateOwnershipKeyReq{}
@@ -81,7 +89,7 @@ func GenerateOwnershipKey(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, GenerateOwnershipKeyResp{
-		VerificationKey: loadedDi.Verification.VerificationKey,
+		VerificationKey: fmt.Sprintf("%s;%s;%s", svConfig.App.VerificationTxtRecordName, loadedDi.DomainName, loadedDi.Verification.VerificationKey),
 		DomainName:      loadedDi.DomainName,
 	})
 	return

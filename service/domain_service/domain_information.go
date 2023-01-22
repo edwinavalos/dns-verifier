@@ -18,8 +18,12 @@ import (
 	"time"
 )
 
-var SvConfig *config.Config
+var svConfig *config.Config
 var VerificationMap *sync.Map
+
+func SetConfig(conf *config.Config) {
+	svConfig = conf
+}
 
 type Delegations struct {
 	ARecords            []string
@@ -53,9 +57,9 @@ func (di *DomainInformation) VerifyOwnership(ctx context.Context) (bool, error) 
 	}
 
 	log.Debug().Msgf("txtRecords: %+v", txtRecords)
-	log.Debug().Msgf("trying to find: %s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey)
+	log.Debug().Msgf("trying to find: %s;%s;%s", svConfig.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey)
 	for _, txt := range txtRecords {
-		if txt == fmt.Sprintf("%s;%s;%s", SvConfig.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey) {
+		if txt == fmt.Sprintf("%s;%s;%s", svConfig.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey) {
 			log.Info().Msgf("found key: %s", txt)
 			return true, nil
 		}
@@ -83,7 +87,7 @@ func (di *DomainInformation) VerifyARecord(ctx context.Context) (bool, error) {
 
 	// This might need to become that all A records are pointing at us, which might be the correct thing to do
 	for _, record := range aRecords {
-		if contains(SvConfig.Network.OwnedHosts, record) {
+		if contains(svConfig.Network.OwnedHosts, record) {
 			return true, nil
 		}
 	}
@@ -98,7 +102,7 @@ func (di *DomainInformation) VerifyCNAME(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	if contains(SvConfig.Network.OwnedCnames, cname) {
+	if contains(svConfig.Network.OwnedCnames, cname) {
 		return true, err
 	}
 
@@ -153,8 +157,8 @@ func (di *DomainInformation) SaveDomainInformation(ctx context.Context) error {
 }
 
 func SaveDomainInformationFile(ctx context.Context, verifications *sync.Map) error {
-	verificationFileName := SvConfig.Aws.VerificationFileName
-	log.Debug().Msgf("creating verification file at s3://%s/%s", SvConfig.Aws.BucketName, SvConfig.Aws.VerificationFileName)
+	verificationFileName := svConfig.Aws.VerificationFileName
+	log.Debug().Msgf("creating verification file at s3://%s/%s", svConfig.Aws.BucketName, svConfig.Aws.VerificationFileName)
 	jsonMap := utils.SyncMap2Map(verifications)
 	content, _ := json.MarshalIndent(jsonMap, "", " ")
 	err := os.WriteFile(verificationFileName, content, 0644)
@@ -169,14 +173,14 @@ func SaveDomainInformationFile(ctx context.Context, verifications *sync.Map) err
 	if err != nil {
 		return err
 	}
-	_, err = SvConfig.Aws.S3Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:        &SvConfig.Aws.BucketName,
-		Key:           &SvConfig.Aws.VerificationFileName,
+	_, err = svConfig.Aws.S3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        &svConfig.Aws.BucketName,
+		Key:           &svConfig.Aws.VerificationFileName,
 		Body:          file,
 		ContentLength: stat.Size(),
 	})
 	if err != nil {
-		log.Error().Msgf("unable to create file at s3://%s/%s", SvConfig.Aws.BucketName, SvConfig.Aws.VerificationFileName)
+		log.Error().Msgf("unable to create file at s3://%s/%s", svConfig.Aws.BucketName, svConfig.Aws.VerificationFileName)
 		return err
 	}
 
@@ -186,23 +190,23 @@ func SaveDomainInformationFile(ctx context.Context, verifications *sync.Map) err
 func GetOrCreateDomainInformationFile(ctx context.Context) (*sync.Map, error) {
 	var verifications sync.Map
 	createFile := false
-	getObjectOutput, err := SvConfig.Aws.S3Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: &SvConfig.Aws.BucketName,
-		Key:    &SvConfig.Aws.VerificationFileName,
+	getObjectOutput, err := svConfig.Aws.S3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: &svConfig.Aws.BucketName,
+		Key:    &svConfig.Aws.VerificationFileName,
 	})
 	if err != nil {
 		var nske *types.NoSuchKey
 		if errors.As(err, &nske) {
-			log.Info().Msgf("Did not find key, creating file... s3://%s/%s", SvConfig.Aws.BucketName, SvConfig.Aws.VerificationFileName)
+			log.Info().Msgf("Did not find key, creating file... s3://%s/%s", svConfig.Aws.BucketName, svConfig.Aws.VerificationFileName)
 			createFile = true
 		}
 		var nsb *types.NoSuchBucket
 		if errors.As(err, &nsb) {
-			log.Error().Msgf("bucket: %s does not exit... exiting", SvConfig.Aws.BucketName)
+			log.Error().Msgf("bucket: %s does not exit... exiting", svConfig.Aws.BucketName)
 			return &verifications, fmt.Errorf("bucket does not exist")
 		}
 	}
-	if createFile || SvConfig.App.AlwaysRecreate {
+	if createFile || svConfig.App.AlwaysRecreate {
 		err2 := SaveDomainInformationFile(ctx, &verifications)
 		if err2 != nil {
 			return &verifications, err2

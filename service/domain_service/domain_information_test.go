@@ -77,7 +77,7 @@ func TestVerifyDomain(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SvConfig = tt.args.config
+			svConfig = tt.args.config
 			verified, err := tt.args.verification.VerifyOwnership(tt.args.ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("VerifyOwnership() error = %v, wantErr %v", err, tt.wantErr)

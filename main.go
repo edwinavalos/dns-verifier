@@ -6,6 +6,7 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/edwinavalos/dns-verifier/config"
+	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/edwinavalos/dns-verifier/server"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/edwinavalos/dns-verifier/utils"
@@ -51,7 +52,8 @@ func main() {
 
 	awsS3Client := s3.NewFromConfig(cfg)
 	appConfig.Aws.S3Client = awsS3Client
-	domain_service.SvConfig = appConfig
+	domain_service.SetConfig(appConfig)
+	v1.SetConfig(appConfig)
 
 	verifications, err := domain_service.GetOrCreateDomainInformationFile(cCtx)
 	if err != nil {

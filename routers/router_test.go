@@ -53,7 +53,7 @@ func TestAllOfIt(t *testing.T) {
 
 	awsS3Client := s3.NewFromConfig(cfg)
 	appConfig.Aws.S3Client = awsS3Client
-	domain_service.SvConfig = appConfig
+	domain_service.svConfig = appConfig
 	domain_service.VerificationMap = &sync.Map{}
 
 	// Create our router
