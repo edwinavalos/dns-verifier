@@ -9,7 +9,6 @@ import (
 	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/edwinavalos/dns-verifier/server"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
-	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -60,7 +59,7 @@ func main() {
 		log.Panic().Msgf("unable to get verification file from s3")
 		panic(err)
 	}
-	log.Debug().Msgf("verifications: %+v\n", utils.SyncMap2Map(verifications))
+	log.Debug().Msgf("verifications: %+v\n", domain_service.SyncMap2Map(verifications))
 
 	srv := server.NewServer(verifications)
 	srv.ListenAndServe()

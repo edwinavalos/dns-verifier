@@ -8,8 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/edwinavalos/dns-verifier/config"
-	"github.com/edwinavalos/dns-verifier/utils"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"net"
 	"os"
@@ -45,7 +43,7 @@ type DomainInformation struct {
 	DomainName   string
 	Verification Verification
 	Delegations  Delegations
-	UserId       uuid.UUID
+	UserId       string
 }
 
 // VerifyOwnership checks the TXT record for our verification string we give people
@@ -110,43 +108,67 @@ func (di *DomainInformation) VerifyCNAME(ctx context.Context) (bool, error) {
 }
 
 func (di *DomainInformation) LoadOrStore(ctx context.Context) (*DomainInformation, bool, error) {
-	value, loaded := VerificationMap.LoadOrStore(di.DomainName, di)
-	if !loaded {
+	val, ok := VerificationMap.Load(di.UserId)
+	if !ok {
+		// We didn't load it, so we create a new map and stick it into the sync.Map
+		newMap := map[string]DomainInformation{di.DomainName: *di}
+		VerificationMap.Store(di.UserId, newMap)
 		return di, false, nil
 	}
 
-	actualValue, ok := value.(*DomainInformation)
+	actualVal, ok := val.(map[string]DomainInformation)
 	if !ok {
-		return nil, false, fmt.Errorf("unable to cast stored value to DomainInformation")
+		return di, false, fmt.Errorf("ran into error casting value into map[string]DomainInformation")
 	}
 
-	return actualValue, true, nil
+	information := actualVal[di.DomainName]
+	return &information, true, nil
 }
 
 func (di *DomainInformation) Load(ctx context.Context) (*DomainInformation, error) {
-	value, ok := VerificationMap.Load(di.DomainName)
+	value, ok := VerificationMap.Load(di.UserId)
 	if !ok {
 		return di, fmt.Errorf("unable to find %s in verification map", di.DomainName)
 	}
 
-	actualValue, ok := value.(*DomainInformation)
+	actualValue, ok := value.(map[string]DomainInformation)
 	if !ok {
 		return nil, fmt.Errorf("unable to convert map value of key: %s to DomainInformation", di.DomainName)
 	}
 
-	return actualValue, nil
+	information := actualValue[di.DomainName]
+	return &information, nil
 }
 
 func (di *DomainInformation) LoadAndDelete(ctx context.Context) (bool, error) {
-	_, loaded := VerificationMap.LoadAndDelete(di.DomainName)
-	if !loaded {
-		return false, nil
+	val, ok := VerificationMap.Load(di.UserId)
+	if !ok {
+		return false, fmt.Errorf("unable to load domain information to delete it")
+	}
+	actualVal, ok := val.(map[string]DomainInformation)
+	if !ok {
+		return false, fmt.Errorf("unable to cast to map[string]DomainInformation to delete it")
+	}
+
+	delete(actualVal, di.DomainName)
+
+	if len(actualVal) == 0 {
+		VerificationMap.Delete(di.UserId)
 	}
 	return true, nil
 }
 
 func (di *DomainInformation) SaveDomainInformation(ctx context.Context) error {
-	VerificationMap.Store(di.DomainName, di)
+	val, ok := VerificationMap.Load(di.UserId)
+	if !ok {
+		return fmt.Errorf("had an issue loading domain information to save it")
+	}
+	actualVal, ok := val.(map[string]DomainInformation)
+	if !ok {
+		return fmt.Errorf("error casing value to map[string]DomainInformation")
+	}
+	actualVal[di.DomainName] = *di
+	VerificationMap.Store(di.UserId, actualVal)
 
 	err := SaveDomainInformationFile(ctx, VerificationMap)
 	if err != nil {
@@ -159,7 +181,7 @@ func (di *DomainInformation) SaveDomainInformation(ctx context.Context) error {
 func SaveDomainInformationFile(ctx context.Context, verifications *sync.Map) error {
 	verificationFileName := svConfig.Aws.VerificationFileName
 	log.Debug().Msgf("creating verification file at s3://%s/%s", svConfig.Aws.BucketName, svConfig.Aws.VerificationFileName)
-	jsonMap := utils.SyncMap2Map(verifications)
+	jsonMap := SyncMap2Map(verifications)
 	content, _ := json.MarshalIndent(jsonMap, "", " ")
 	err := os.WriteFile(verificationFileName, content, 0644)
 	if err != nil {
@@ -226,15 +248,40 @@ func GetOrCreateDomainInformationFile(ctx context.Context) (*sync.Map, error) {
 }
 
 func PopulateVerifications(syncMap *sync.Map, output *s3.GetObjectOutput) error {
-	regMap := map[string]*DomainInformation{}
+	// Refactoring note: This will be map[userId]map[url]domainInformation
+	regMap := map[string]map[string]DomainInformation{}
 	err := json.NewDecoder(output.Body).Decode(&regMap)
 	if err != nil {
 		return err
 	}
 
-	for _, k := range regMap {
-		syncMap.Store(k.DomainName, k)
+	for userId := range regMap {
+		val, _ := syncMap.LoadOrStore(userId, map[string]DomainInformation{})
+		actualVal, _ := val.(map[string]DomainInformation)
+		for domainName := range regMap[userId] {
+			actualVal[domainName] = regMap[userId][domainName]
+			syncMap.Store(userId, actualVal)
+		}
 	}
 
 	return nil
+}
+
+func SyncMap2Map(syncMap *sync.Map) map[string]interface{} {
+	regMap := make(map[string]interface{})
+	if syncMap != nil {
+		syncMap.Range(func(k interface{}, v interface{}) bool {
+			usersDomains, ok := v.(map[string]DomainInformation)
+			if !ok {
+				fmt.Print("err: unable to cast to DomainInformation")
+				return false
+			}
+			fmt.Printf("%+v", usersDomains)
+			for key, val := range usersDomains {
+				regMap[k.(string)] = map[string]DomainInformation{key: val}
+			}
+			return true
+		})
+	}
+	return regMap
 }
