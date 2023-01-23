@@ -131,7 +131,7 @@ func VerifyOwnership(c *gin.Context) {
 
 	val, ok := domain_service.VerificationMap.Load(newVerifyOwnershipReq.UserId)
 	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"error": "could not find requested domainName in database"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "could not find requested domainName by userId in database"})
 		return
 	}
 	userDomainNames, ok := val.(map[string]domain_service.DomainInformation)
