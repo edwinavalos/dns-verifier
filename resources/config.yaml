@@ -10,3 +10,8 @@ network:
     - 34.217.225.51
   owned_cnames:
     - spons.us.
+
+le_settings:
+  admin_email: "admin@amoslabs.cloud"
+  private_key_location: "C:\\mastodon\\private-key.pem"
+

@@ -3,8 +3,15 @@ package config
 import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/go-acme/lego/v4/lego"
 	"github.com/spf13/viper"
 )
+
+type LetsEncryptSettings struct {
+	CADirURL           string `json:"ca_dir_url"`
+	AdminEmail         string `json:"admin_email"`
+	PrivateKeyLocation string `json:"private_key_location"`
+}
 
 type AWSSettings struct {
 	Region               string
@@ -27,6 +34,8 @@ type NetworkSettings struct {
 type Config struct {
 	Aws        AWSSettings
 	App        AppSettings
+	LESettings LetsEncryptSettings
+	Env        string
 	Network    NetworkSettings
 	RootCancel context.CancelFunc
 	RootCtx    context.Context
@@ -40,6 +49,13 @@ func (c *Config) ReadConfig() *Config {
 	c.App.AlwaysRecreate = viper.GetBool("app.alwaysRecreate")
 	c.Network.OwnedHosts = viper.GetStringSlice("network.owned_hosts")
 	c.Network.OwnedCnames = viper.GetStringSlice("network.owned_cnames")
+
+	c.LESettings.CADirURL = lego.LEDirectoryStaging
+	if c.Env == "prod" {
+		c.LESettings.CADirURL = lego.LEDirectoryProduction
+	}
+	c.LESettings.AdminEmail = viper.GetString("le_settings.admin_email")
+	c.LESettings.PrivateKeyLocation = viper.GetString("le_settings.private_key_location")
 	return c
 }
 
