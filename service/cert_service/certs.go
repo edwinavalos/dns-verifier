@@ -1,17 +1,18 @@
-package certs
+package cert_service
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	cryptorand "crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/logger"
+	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/lego"
@@ -94,46 +95,52 @@ func getRequestUserCert() (*ecdsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func completeCertificateRequest(domain string, client *lego.Client) (*certificate.Resource, error) {
-	csr := x509.CertificateRequest{
-		Subject: pkix.Name{
-			CommonName:   domain,
-			Organization: []string{"Amos Labs LLC"},
-		},
-		SignatureAlgorithm: x509.SHA256WithRSA,
-		DNSNames:           []string{domain},
-	}
-	csrRequest := certificate.ObtainForCSRRequest{
-		CSR:                            &csr,
-		Bundle:                         true,
-		PreferredChain:                 "",
-		AlwaysDeactivateAuthorizations: false,
-	}
-
+func CompleteCertificateRequest(userId string, domain string, client *lego.Client) (string, error) {
 	manualProvider, err := NewDNSProviderManual()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	err = client.Challenge.SetDNS01Provider(manualProvider)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	certificates, err := client.Certificate.ObtainForCSR(csrRequest)
+	request := certificate.ObtainRequest{
+		Domains: []string{domain},
+		Bundle:  true,
+	}
+	certificates, err := client.Certificate.Obtain(request)
 	if err != nil {
-		return nil, err
+		return "", err
+	}
+	// Need to save the cert URL to retrieve it without re-requesting if possible
+	val, ok := domain_service.VerificationMap.Load(userId)
+	if !ok {
+		return "", fmt.Errorf("domain: %s unable to lookup user in verification map")
+	}
+	domainInformation, ok := val.(domain_service.DomainInformation)
+	if !ok {
+		return "", fmt.Errorf("domain: %s unable to convert verification map entry to DomainInformation")
 	}
 
+	ctx := context.Background()
+	domainInformation.LEVerification.Verified = true
+	err = domainInformation.SaveDomainInformation(ctx)
+	if err != nil {
+		return "", fmt.Errorf("domain: %s unable to save DomainInformation %w", err)
+	}
 	// ... all done
-	return certificates, nil
-}
-func requestCertificate(domain string, email string) error {
-	// Create a user. New accounts need an email and private key to start.
 
+	// Place the certificate into storage that is shared between our servers, and then send back a positive string
+	l.Infof("%+v", string(certificates.Certificate))
+	return "domain: %s saved to persistent storage", nil
+}
+
+func GetLEGOClient(userId string, domain string, email string) (*lego.Client, error) {
 	privateKey, err := getRequestUserCert()
 	if err != nil {
-		return fmt.Errorf("unable to requestUserCert(): %w", err)
+		return nil, fmt.Errorf("unable to requestUserCert(): %w", err)
 	}
 
 	myUser := certRequestUser{
@@ -151,23 +158,67 @@ func requestCertificate(domain string, email string) error {
 	// A client facilitates communication with the CA server.
 	client, err := lego.NewClient(leConfig)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func RequestCertificate(userId string, domain string, email string) (string, string, error) {
+	// Create a user. New accounts need an email and private key to start.
+
+	privateKey, err := getRequestUserCert()
+	if err != nil {
+		return "", "", fmt.Errorf("unable to requestUserCert(): %w", err)
+	}
+
+	myUser := certRequestUser{
+		Email: email,
+		key:   privateKey,
+	}
+
+	leConfig := lego.NewConfig(&myUser)
+
+	// This CA URL is configured for a local dev instance of Boulder running in Docker in a VM.
+
+	leConfig.CADirURL = cfg.LESettings.CADirURL
+	leConfig.Certificate.KeyType = certcrypto.RSA2048
+
+	// A client facilitates communication with the CA server.
+	client, err := lego.NewClient(leConfig)
+	if err != nil {
+		return "", "", err
 	}
 
 	// New users will need to register
 	reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	myUser.Registration = reg
 
-	manualProvider := DNSProviderManual{}
-	err = manualProvider.Present(domain, "", "")
+	provider, err := NewDNSProviderManual()
 	if err != nil {
-		return err
+		return "", "", fmt.Errorf("domain: %s unable to create new DNSProviderManual %w", domain, err)
 	}
 
-	return nil
+	err = client.Challenge.SetDNS01Provider(provider)
+	if err != nil {
+		return "", "", fmt.Errorf("domain: %s unable to set new DNSProviderManual %w", domain, err)
+	}
+
+	err = provider.Present(domain, userId, cfg.LESettings.KeyAuth)
+	if err != nil {
+		return "", "", fmt.Errorf("domain: %s unable to present challenge %w", domain, err)
+	}
+
+	// Because present has to satisfy an interface, we need to the information we wrote in it via DomainInformation lookups. Joy.
+	domainInfo, err := domain_service.DomainInfoByUserId(userId, domain)
+	if err != nil {
+		return "", "", fmt.Errorf("domain: %s unable to get DomainInfo from verification map: %w", domain, err)
+	}
+
+	return domainInfo.LEVerification.VerificationZone, domainInfo.LEVerification.VerificationKey, nil
 }
 
 func contains[T comparable](elems []T, v T) bool {
@@ -216,7 +267,7 @@ func toStringList(ips []net.IP) []string {
 //				var certificates *certificate.Resource
 //				if !exists {
 //					l.Infof("domain: %s cert file does not exist... attempting creation", domain)
-//					err = requestCertificate(domain, cfg.LESettings.AdminEmail)
+//					err = RequestCertificate(domain, cfg.LESettings.AdminEmail)
 //					if err != nil {
 //						l.Errorf("unable to request certificate from Let's Encrypt for domain: %s, err: %s", domain, err)
 //						continue
@@ -227,7 +278,7 @@ func toStringList(ips []net.IP) []string {
 //
 //				if !valid {
 //					l.Infof("domain %s certificate is expired... will generate", domain)
-//					err = requestCertificate(domain, cfg.LESettings.AdminEmail)
+//					err = RequestCertificate(domain, cfg.LESettings.AdminEmail)
 //					if err != nil {
 //						l.Errorf("unable to request certificate from Let's Encrypt for domain: %s, err: %s", domain, err)
 //						continue

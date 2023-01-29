@@ -1,18 +1,19 @@
 package v1
 
 import (
+	"errors"
 	"fmt"
-	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
-var svConfig *config.Config
+var l *logger.Logger
 
-func SetConfig(conf *config.Config) {
-	svConfig = conf
+func SetLogger(toSet *logger.Logger) {
+	l = toSet
 }
 
 type GenerateOwnershipKeyReq struct {
@@ -54,15 +55,15 @@ type DeleteDomainInformationReq struct {
 	UserId     string `json:"user_id"`
 }
 
-func GetDomainInformation(c *gin.Context) {
+func HandleGetDomainInformation(c *gin.Context) {
 	c.JSON(http.StatusOK, domain_service.SyncMap2Map(domain_service.VerificationMap))
 }
 
-// GenerateOwnershipKey
+// HandleGenerateOwnershipKey
 // TODO: This behavior of wiping out the verification is probably too stronk, need to make it only create one if
 //
 //	there isn't other information. StoreOrLoad probably is what I want here.
-func GenerateOwnershipKey(c *gin.Context) {
+func HandleGenerateOwnershipKey(c *gin.Context) {
 	var newGenerateOwnershipKeyReq = GenerateOwnershipKeyReq{}
 	err := c.BindJSON(&newGenerateOwnershipKeyReq)
 	if err != nil {
@@ -90,13 +91,13 @@ func GenerateOwnershipKey(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, GenerateOwnershipKeyResp{
-		VerificationKey: fmt.Sprintf("%s;%s;%s", svConfig.App.VerificationTxtRecordName, loadedDi.DomainName, loadedDi.Verification.VerificationKey),
+		VerificationKey: fmt.Sprintf("%s;%s;%s", cfg.App.VerificationTxtRecordName, loadedDi.DomainName, loadedDi.Verification.VerificationKey),
 		DomainName:      loadedDi.DomainName,
 	})
 	return
 }
 
-func DeleteVerification(c *gin.Context) {
+func HandleDeleteVerification(c *gin.Context) {
 	var newDeleteVerificationRequest = DeleteVerificationReq{}
 	if err := c.BindJSON(&newDeleteVerificationRequest); err != nil {
 		return
@@ -109,7 +110,7 @@ func DeleteVerification(c *gin.Context) {
 
 	err := domain_service.SaveDomainInformationFile(c, domain_service.VerificationMap)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -121,8 +122,8 @@ type VerifyOwnershipReq struct {
 	UserId     string `form:"user_id"`
 }
 
-// VerifyOwnership only does TXT record checks
-func VerifyOwnership(c *gin.Context) {
+// HandleVerifyOwnership only does TXT record checks
+func HandleVerifyOwnership(c *gin.Context) {
 	var newVerifyOwnershipReq VerifyOwnershipReq
 	err := c.BindQuery(&newVerifyOwnershipReq)
 	if err != nil {
@@ -174,7 +175,7 @@ func VerifyOwnership(c *gin.Context) {
 //		if !ok {
 //			return false
 //		}
-//		result, err := verification.VerifyOwnership(c)
+//		result, err := verification.HandleVerifyOwnership(c)
 //		if err != nil {
 //			return false
 //		}
@@ -201,41 +202,70 @@ func VerifyOwnership(c *gin.Context) {
 //	return
 //}
 
-// CreateDomainInformation will create domain information if not present in VerificationMap
+// HandleCreateDomainInformation will create domain information if not present in VerificationMap
 // if it is present, we return 202 and move on with our lives
-func CreateDomainInformation(c *gin.Context) {
+func HandleCreateDomainInformation(c *gin.Context) {
 	var newCreateDomainInformationReq = CreateDomainInformationReq{}
 	err := c.BindJSON(&newCreateDomainInformationReq)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	domainInformation := domain_service.DomainInformation{
-		DomainName: newCreateDomainInformationReq.DomainName,
-		UserId:     newCreateDomainInformationReq.UserId,
+	domain := newCreateDomainInformationReq.DomainName
+	userId := newCreateDomainInformationReq.UserId
+
+	if domain == "" || userId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing domain_name or user_id"})
+		return
 	}
 
-	loadedDi, loaded, err := domainInformation.LoadOrStore(c)
+	_, err = domain_service.DomainInfoByUserId(userId, domain)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
-		return
-	}
-	if loaded {
-		c.JSON(http.StatusAccepted, gin.H{"message": "Accepted and domain already present"})
+		if errors.Is(err, domain_service.ErrUnableToFindUser) {
+			err := createDomainInformation(c, domain, userId)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "did not find user, created it and the domain"})
+			return
+		}
+		if errors.Is(err, domain_service.ErrNoDomainInformation) {
+			err := createDomainInformation(c, domain, userId)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "found user, but not domain, created it"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	err = loadedDi.SaveDomainInformation(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{})
+	c.JSON(http.StatusAccepted, gin.H{"message": "domain already existed"})
 }
 
-func DeleteDomainInformation(c *gin.Context) {
+func createDomainInformation(c *gin.Context, domain string, userId string) error {
+	domainInformation := domain_service.DomainInformation{
+		DomainName: domain,
+		UserId:     userId,
+	}
+	user, _, err := domainInformation.LoadOrStore(c)
+	if err != nil {
+		return err
+	}
+
+	domain_service.VerificationMap.Store(userId, user)
+	err = domainInformation.SaveDomainInformation(c)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func HandleDeleteDomainInformation(c *gin.Context) {
 	var newDeleteDomainInformationReq DeleteDomainInformationReq
 	if err := c.Bind(&newDeleteDomainInformationReq); err != nil {
 		return
@@ -245,7 +275,7 @@ func DeleteDomainInformation(c *gin.Context) {
 
 	loaded, err := di.LoadAndDelete(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -256,7 +286,7 @@ func DeleteDomainInformation(c *gin.Context) {
 
 	err = domain_service.SaveDomainInformationFile(c, domain_service.VerificationMap)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -276,7 +306,7 @@ type VerifyDelegationReq struct {
 	Type       Record `json:"type"`
 }
 
-func VerifyDelegation(c *gin.Context) {
+func HandleVerifyDelegation(c *gin.Context) {
 	var newCreateDelegationRequest VerifyDelegationReq
 	err := c.BindJSON(&newCreateDelegationRequest)
 	if err != nil {
@@ -286,7 +316,7 @@ func VerifyDelegation(c *gin.Context) {
 	di := domain_service.DomainInformation{DomainName: newCreateDelegationRequest.DomainName}
 	loadedDi, err := di.Load(c)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -295,13 +325,13 @@ func VerifyDelegation(c *gin.Context) {
 	case ARecord:
 		verified, err = loadedDi.VerifyARecord(c)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 	case CName:
 		verified, err = loadedDi.VerifyCNAME(c)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 	}

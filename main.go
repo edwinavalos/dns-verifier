@@ -6,8 +6,10 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/logger"
 	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/edwinavalos/dns-verifier/server"
+	"github.com/edwinavalos/dns-verifier/service/cert_service"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -20,6 +22,10 @@ func main() {
 	rand.Seed(time.Now().Unix())
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	rootCtx := context.Background()
+	rootLogger := logger.Logger{
+		Logger: zerolog.Logger{},
+	}
+	domain_service.SetLogger(&rootLogger)
 
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -53,6 +59,7 @@ func main() {
 	appConfig.Aws.S3Client = awsS3Client
 	domain_service.SetConfig(appConfig)
 	v1.SetConfig(appConfig)
+	cert_service.SetConfig(appConfig)
 
 	verifications, err := domain_service.GetOrCreateDomainInformationFile(cCtx)
 	if err != nil {

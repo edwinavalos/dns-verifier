@@ -1,13 +1,15 @@
-package certs
+package cert_service
 
 import (
 	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
-	"reflect"
+	"github.com/google/uuid"
+	"sync"
 	"testing"
 )
 
@@ -18,6 +20,7 @@ func Test_requestCertificate(t *testing.T) {
 	type args struct {
 		domain string
 		email  string
+		userId string
 	}
 	tests := []struct {
 		name    string
@@ -29,6 +32,7 @@ func Test_requestCertificate(t *testing.T) {
 			args: args{
 				domain: "test.amoslabs.cloud",
 				email:  "admin@amoslabs.cloud",
+				userId: uuid.New().String(),
 			},
 			wantErr: false,
 		},
@@ -36,19 +40,14 @@ func Test_requestCertificate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg = &testConfig
-			if err := requestCertificate(tt.args.domain, tt.args.email); (err != nil) != tt.wantErr {
-				t.Errorf("requestCertificate() error = %v, wantErr %v", err, tt.wantErr)
+			if _, _, err := RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email); (err != nil) != tt.wantErr {
+				t.Errorf("RequestCertificate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
 func Test_completeCertificateRequest(t *testing.T) {
-
-	testConfig := config.Config{}
-	testConfig.LESettings.PrivateKeyLocation = "C:\\mastodon\\private-key.pem"
-	testConfig.LESettings.CADirURL = lego.LEDirectoryStaging
-	cfg = &testConfig
 	privateKey, err := getRequestUserCert()
 	if err != nil {
 		t.Fatal(err)
@@ -82,6 +81,8 @@ func Test_completeCertificateRequest(t *testing.T) {
 		domain         string
 		client         *lego.Client
 		manualProvider *challenge.Provider
+		email          string
+		userId         string
 	}
 	tests := []struct {
 		name    string
@@ -94,6 +95,8 @@ func Test_completeCertificateRequest(t *testing.T) {
 			args: args{
 				domain: "test.amoslabs.cloud",
 				client: client,
+				email:  "admin@amoslabs.cloud",
+				userId: uuid.New().String(),
 			},
 			want:    nil,
 			wantErr: false,
@@ -101,13 +104,25 @@ func Test_completeCertificateRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := completeCertificateRequest(tt.args.domain, tt.args.client)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("completeCertificateRequest() error = %v, wantErr %v", err, tt.wantErr)
+			domainInformation := domain_service.DomainInformation{
+				DomainName:     tt.args.domain,
+				Verification:   domain_service.Verification{},
+				LEVerification: domain_service.Verification{},
+				Delegations:    domain_service.Delegations{},
+				UserId:         tt.args.userId,
+			}
+
+			domain_service.VerificationMap = &sync.Map{}
+			domain_service.VerificationMap.Store(tt.args.domain, domainInformation)
+			_, _, err := RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email)
+			if err != nil {
+				t.Errorf("RequestCertificate() err %v, wantErr: %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("completeCertificateRequest() got = %v, want %v", got, tt.want)
+			_, err = CompleteCertificateRequest(tt.args.userId, tt.args.domain, tt.args.client)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CompleteCertificateRequest() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
 		})
 	}

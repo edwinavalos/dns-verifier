@@ -70,7 +70,7 @@ package domain_service
 //	}
 //	for _, tt := range tests {
 //		t.Run(tt.name, func(t *testing.T) {
-//			svConfig = tt.args.config
+//			cfg = tt.args.config
 //			verified, err := tt.args.verification.VerifyOwnership(tt.args.ctx)
 //			if (err != nil) != tt.wantErr {
 //				t.Errorf("VerifyOwnership() error = %v, wantErr %v", err, tt.wantErr)

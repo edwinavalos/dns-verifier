@@ -11,6 +11,7 @@ type LetsEncryptSettings struct {
 	CADirURL           string `json:"ca_dir_url"`
 	AdminEmail         string `json:"admin_email"`
 	PrivateKeyLocation string `json:"private_key_location"`
+	KeyAuth            string `json:"key_auth"`
 }
 
 type AWSSettings struct {
