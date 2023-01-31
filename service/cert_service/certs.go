@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/logger"
+	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
@@ -119,7 +120,7 @@ func CompleteCertificateRequest(userId string, domain string, client *lego.Clien
 	if !ok {
 		return "", fmt.Errorf("domain: %s unable to lookup user in verification map")
 	}
-	domainInformation, ok := val.(domain_service.DomainInformation)
+	domainInformation, ok := val.(models.DomainInformation)
 	if !ok {
 		return "", fmt.Errorf("domain: %s unable to convert verification map entry to DomainInformation")
 	}

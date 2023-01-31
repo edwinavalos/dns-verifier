@@ -8,6 +8,7 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/models"
 	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/google/uuid"
@@ -93,7 +94,7 @@ func TestAllOfIt(t *testing.T) {
 
 	// Now we need to change the domain information we just wrote to be one that we can verify with our
 	// edwinavalos.com domain
-	di := domain_service.DomainInformation{DomainName: domainName}
+	di := models.DomainInformation{DomainName: domainName}
 	diToUpdate, err := di.Load(ctx)
 	if err != nil {
 		t.Fatal(err)

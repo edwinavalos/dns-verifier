@@ -3,6 +3,7 @@ package cert_service
 import (
 	"context"
 	"fmt"
+	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"time"
@@ -33,7 +34,7 @@ func (*DNSProviderManual) Present(domain string, userId string, keyAuth string) 
 	if !ok {
 		return err
 	}
-	domainInformation, ok := val.(domain_service.DomainInformation)
+	domainInformation, ok := val.(models.DomainInformation)
 	if !ok {
 		return fmt.Errorf("unable to cast value to DomainInformation")
 	}

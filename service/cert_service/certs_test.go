@@ -2,6 +2,7 @@ package cert_service
 
 import (
 	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
@@ -104,11 +105,11 @@ func Test_completeCertificateRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			domainInformation := domain_service.DomainInformation{
+			domainInformation := models.DomainInformation{
 				DomainName:     tt.args.domain,
-				Verification:   domain_service.Verification{},
-				LEVerification: domain_service.Verification{},
-				Delegations:    domain_service.Delegations{},
+				Verification:   models.Verification{},
+				LEVerification: models.Verification{},
+				Delegations:    models.Delegations{},
 				UserId:         tt.args.userId,
 			}
 

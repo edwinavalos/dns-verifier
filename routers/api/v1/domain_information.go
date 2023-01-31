@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/edwinavalos/dns-verifier/logger"
+	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/edwinavalos/dns-verifier/utils"
 	"github.com/gin-gonic/gin"
@@ -70,7 +71,7 @@ func HandleGenerateOwnershipKey(c *gin.Context) {
 		return
 	}
 
-	di := domain_service.DomainInformation{DomainName: newGenerateOwnershipKeyReq.DomainName, UserId: newGenerateOwnershipKeyReq.UserId}
+	di := models.DomainInformation{DomainName: newGenerateOwnershipKeyReq.DomainName, UserId: newGenerateOwnershipKeyReq.UserId}
 
 	loadedDi, err := di.Load(c)
 	if err != nil {
@@ -135,7 +136,7 @@ func HandleVerifyOwnership(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "could not find requested domainName by userId in database"})
 		return
 	}
-	userDomainNames, ok := val.(map[string]domain_service.DomainInformation)
+	userDomainNames, ok := val.(map[string]models.DomainInformation)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to convert db value to map[string]DomainInformation"})
 		return
@@ -248,7 +249,7 @@ func HandleCreateDomainInformation(c *gin.Context) {
 }
 
 func createDomainInformation(c *gin.Context, domain string, userId string) error {
-	domainInformation := domain_service.DomainInformation{
+	domainInformation := models.DomainInformation{
 		DomainName: domain,
 		UserId:     userId,
 	}
@@ -271,7 +272,7 @@ func HandleDeleteDomainInformation(c *gin.Context) {
 		return
 	}
 
-	di := domain_service.DomainInformation{DomainName: newDeleteDomainInformationReq.DomainName, UserId: newDeleteDomainInformationReq.UserId}
+	di := models.DomainInformation{DomainName: newDeleteDomainInformationReq.DomainName, UserId: newDeleteDomainInformationReq.UserId}
 
 	loaded, err := di.LoadAndDelete(c)
 	if err != nil {
@@ -313,7 +314,7 @@ func HandleVerifyDelegation(c *gin.Context) {
 		return
 	}
 
-	di := domain_service.DomainInformation{DomainName: newCreateDelegationRequest.DomainName}
+	di := models.DomainInformation{DomainName: newCreateDelegationRequest.DomainName}
 	loadedDi, err := di.Load(c)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

@@ -61,13 +61,6 @@ func main() {
 	v1.SetConfig(appConfig)
 	cert_service.SetConfig(appConfig)
 
-	verifications, err := domain_service.GetOrCreateDomainInformationFile(cCtx)
-	if err != nil {
-		log.Panic().Msgf("unable to get verification file from s3")
-		panic(err)
-	}
-	log.Debug().Msgf("verifications: %+v\n", domain_service.SyncMap2Map(verifications))
-
-	srv := server.NewServer(verifications)
+	srv := server.NewServer()
 	srv.ListenAndServe()
 }

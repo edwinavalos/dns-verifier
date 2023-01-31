@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DynamoDBConfiguration">
+    <option name="databaseConfigurations">
+      <map>
+        <entry key="e2f40f9d-f9c2-4aa2-87ff-fdb058177ae5">
+          <value>
+            <M>
+              <option name="connectionType" value="Custom endpoint" />
+              <option name="customEndpoint" value="http://localhost:8000" />
+              <option name="customRegion" value="us-east-1" />
+              <option name="id" value="e2f40f9d-f9c2-4aa2-87ff-fdb058177ae5" />
+              <option name="label" value="DynamoDB" />
+              <option name="region" />
+              <option name="version" value="2" />
+            </M>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="requestHistory">
+      <map>
+        <entry key="e2f40f9d-f9c2-4aa2-87ff-fdb058177ae5" value="[{&quot;body&quot;:&quot;{\n  \&quot;Limit\&quot;: 50,\n  \&quot;TableName\&quot;: \&quot;dns-verifier\&quot;,\n  \&quot;ReturnConsumedCapacity\&quot;: \&quot;TOTAL\&quot;\n}&quot;,&quot;operation&quot;:&quot;SCAN&quot;,&quot;sqlStatement&quot;:null},{&quot;body&quot;:&quot;{\n  \&quot;Limit\&quot;: 50,\n  \&quot;TableName\&quot;: \&quot;dns-verifier\&quot;,\n  \&quot;ReturnConsumedCapacity\&quot;: \&quot;TOTAL\&quot;\n}&quot;,&quot;operation&quot;:&quot;SCAN&quot;,&quot;sqlStatement&quot;:null},{&quot;body&quot;:&quot;{\n  \&quot;Limit\&quot;: 50,\n  \&quot;TableName\&quot;: \&quot;dns-verifier\&quot;,\n  \&quot;ReturnConsumedCapacity\&quot;: \&quot;TOTAL\&quot;\n}&quot;,&quot;operation&quot;:&quot;SCAN&quot;,&quot;sqlStatement&quot;:null}]" />
+      </map>
+    </option>
+    <option name="version" value="1" />
+  </component>
+</project>

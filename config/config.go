@@ -29,13 +29,20 @@ type AppSettings struct {
 
 type NetworkSettings struct {
 	OwnedHosts  []string // Could be a net.url, but do we need to be fancy?
-	OwnedCnames []string
+	OwnedCNames []string
+}
+
+type DatabaseSettings struct {
+	TableName string
+	Region    string
+	IsLocal   bool
 }
 
 type Config struct {
 	Aws        AWSSettings
 	App        AppSettings
 	LESettings LetsEncryptSettings
+	DB         DatabaseSettings
 	Env        string
 	Network    NetworkSettings
 	RootCancel context.CancelFunc
@@ -49,7 +56,7 @@ func (c *Config) ReadConfig() *Config {
 	c.App.VerificationTxtRecordName = viper.GetString("app.verificationTxtRecordName")
 	c.App.AlwaysRecreate = viper.GetBool("app.alwaysRecreate")
 	c.Network.OwnedHosts = viper.GetStringSlice("network.owned_hosts")
-	c.Network.OwnedCnames = viper.GetStringSlice("network.owned_cnames")
+	c.Network.OwnedCNames = viper.GetStringSlice("network.owned_cnames")
 
 	c.LESettings.CADirURL = lego.LEDirectoryStaging
 	if c.Env == "prod" {
@@ -57,6 +64,11 @@ func (c *Config) ReadConfig() *Config {
 	}
 	c.LESettings.AdminEmail = viper.GetString("le_settings.admin_email")
 	c.LESettings.PrivateKeyLocation = viper.GetString("le_settings.private_key_location")
+
+	c.DB.TableName = viper.GetString("db.table_name")
+	c.DB.Region = viper.GetString("db.region")
+	c.DB.IsLocal = viper.GetBool("db.is_local")
+	
 	return c
 }
 
@@ -72,7 +84,7 @@ func NewConfig() *Config {
 		},
 		Network: NetworkSettings{
 			OwnedHosts:  []string{"0.0.0.0"},
-			OwnedCnames: []string{"edwinavalos.com"},
+			OwnedCNames: []string{"edwinavalos.com"},
 		},
 		RootCancel: nil,
 		RootCtx:    nil,

@@ -2,14 +2,11 @@ package server
 
 import (
 	"github.com/edwinavalos/dns-verifier/routers"
-	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"net/http"
-	"sync"
 	"time"
 )
 
-func NewServer(verifications *sync.Map) *http.Server {
-	domain_service.VerificationMap = verifications
+func NewServer() *http.Server {
 	routes := routers.InitRouter()
 	return &http.Server{
 		Addr:         ":8080",
