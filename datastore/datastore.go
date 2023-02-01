@@ -8,11 +8,11 @@ import (
 
 type Datastore interface {
 	Initialize() error
-	GetUserDomains(userId string) map[string]models.DomainInformation
-	GetDomainByUser(userId string, domain string) models.DomainInformation
+	GetUserDomains(userId string) (map[string]models.DomainInformation, error)
+	GetDomainByUser(userId string, domain string) (models.DomainInformation, error)
 	PutDomainInfo(information models.DomainInformation) error
-	DeleteDomain(userId string, domain string)
-	DeleteUser(userId string)
+	DeleteDomain(userId string, domain string) error
+	GetAllRecords() ([]models.DomainInformation, error)
 }
 
 func SetLogger(toSet *logger.Logger) {

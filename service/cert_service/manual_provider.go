@@ -1,10 +1,7 @@
 package cert_service
 
 import (
-	"context"
 	"fmt"
-	"github.com/edwinavalos/dns-verifier/models"
-	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"time"
 )
@@ -22,27 +19,21 @@ func NewDNSProviderManual() (*DNSProviderManual, error) {
 }
 
 // Present prints instructions for manually creating the TXT record.
-func (*DNSProviderManual) Present(domain string, userId string, keyAuth string) error {
+func (*DNSProviderManual) Present(domain string, token string, keyAuth string) error {
 	fqdn, value := dns01.GetRecord(domain, keyAuth)
 
-	authZone, err := dns01.FindZoneByFqdn(fqdn)
+	_, err := dns01.FindZoneByFqdn(fqdn)
 	if err != nil {
 		return err
 	}
 
-	val, ok := domain_service.VerificationMap.Load(userId)
-	if !ok {
+	di, err := storage.GetDomainByUser(token, domain)
+	if err != nil {
 		return err
 	}
-	domainInformation, ok := val.(models.DomainInformation)
-	if !ok {
-		return fmt.Errorf("unable to cast value to DomainInformation")
-	}
-
-	domainInformation.Verification.VerificationKey = value
-	domainInformation.Verification.VerificationZone = authZone
-	ctx := context.Background()
-	err = domainInformation.SaveDomainInformation(ctx)
+	di.LEVerification.VerificationKey = value
+	di.LEVerification.VerificationZone = fqdn
+	err = storage.PutDomainInfo(di)
 	if err != nil {
 		return err
 	}

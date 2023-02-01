@@ -2,6 +2,12 @@ aws:
   region: us-west-2
   s3BucketName: mastodon-dns-verification
   verificationFileName: domain_information.json
+
+db:
+  table_name: dns-verifier
+  region: us-east-1
+  is_local: true
+
 app:
   verificationTxtRecordName: "mastodon_ownership_key"
   alwaysRecreate: false

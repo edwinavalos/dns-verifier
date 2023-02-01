@@ -6,6 +6,8 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/datastore"
+	"github.com/edwinavalos/dns-verifier/datastore/dynamo"
 	"github.com/edwinavalos/dns-verifier/logger"
 	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/edwinavalos/dns-verifier/server"
@@ -25,7 +27,8 @@ func main() {
 	rootLogger := logger.Logger{
 		Logger: zerolog.Logger{},
 	}
-	domain_service.SetLogger(&rootLogger)
+
+	SetLoggers(rootLogger)
 
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -57,10 +60,35 @@ func main() {
 
 	awsS3Client := s3.NewFromConfig(cfg)
 	appConfig.Aws.S3Client = awsS3Client
+	SetConfigs(appConfig)
+
+	storage, err := dynamo.NewStorage()
+	if err != nil {
+		panic(err)
+	}
+
+	err = storage.Initialize()
+	if err != nil {
+		panic(err)
+	}
+
+	// At some point we can pass in a polymorphic configuration
+	domain_service.SetStorage(storage)
+	cert_service.SetStorage(storage)
+	srv := server.NewServer()
+	srv.ListenAndServe()
+}
+
+func SetConfigs(appConfig *config.Config) {
 	domain_service.SetConfig(appConfig)
 	v1.SetConfig(appConfig)
 	cert_service.SetConfig(appConfig)
+	datastore.SetConfig(appConfig)
+}
 
-	srv := server.NewServer()
-	srv.ListenAndServe()
+func SetLoggers(rootLogger logger.Logger) {
+	domain_service.SetLogger(&rootLogger)
+	cert_service.SetLogger(&rootLogger)
+	v1.SetLogger(&rootLogger)
+	datastore.SetLogger(&rootLogger)
 }

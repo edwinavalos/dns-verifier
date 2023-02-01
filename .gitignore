@@ -1,4 +1,3 @@
 vendor
-*domain_information.json
-verification.json
-*domain_information_test.json
+domain_information.json
+docker/dynamodb/shared-local-instance.db

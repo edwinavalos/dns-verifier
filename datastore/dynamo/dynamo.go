@@ -8,6 +8,7 @@ import (
 	aws_config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/edwinavalos/dns-verifier/datastore"
@@ -87,11 +88,19 @@ func (d *Storage) Initialize() error {
 				AttributeName: aws.String("user_id"),
 				AttributeType: types.ScalarAttributeTypeS,
 			},
+			{
+				AttributeName: aws.String("domain_name"),
+				AttributeType: types.ScalarAttributeTypeS,
+			},
 		},
 		KeySchema: []types.KeySchemaElement{
 			{
 				AttributeName: aws.String("user_id"),
 				KeyType:       types.KeyTypeHash,
+			},
+			{
+				AttributeName: aws.String("domain_name"),
+				KeyType:       types.KeyTypeRange,
 			},
 		},
 		TableName: aws.String(d.TableName),
@@ -113,12 +122,61 @@ func (d *Storage) Initialize() error {
 	return err
 }
 
-func (d *Storage) GetUserDomains(userId string) map[string]models.DomainInformation {
-	return map[string]models.DomainInformation{}
+func (d *Storage) GetUserDomains(userId string) (map[string]models.DomainInformation, error) {
+	var err error
+	var response *dynamodb.QueryOutput
+	var domainInfo []models.DomainInformation
+	keyEx := expression.Key("user_id").Equal(expression.Value(userId))
+	expr, err := expression.NewBuilder().WithKeyCondition(keyEx).Build()
+	if err != nil {
+		return nil, err
+	} else {
+		response, err = d.Client.Query(context.TODO(), &dynamodb.QueryInput{
+			TableName:                 aws.String(d.TableName),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+			KeyConditionExpression:    expr.KeyCondition(),
+		})
+		if err != nil {
+			return nil, err
+		} else {
+			err = attributevalue.UnmarshalListOfMaps(response.Items, &domainInfo)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	retMap := make(map[string]models.DomainInformation)
+	for _, domain := range domainInfo {
+		retMap[domain.DomainName] = domain
+	}
+
+	return retMap, nil
 }
 
-func (d *Storage) GetDomainByUser(userId string, domain string) models.DomainInformation {
-	return models.DomainInformation{}
+func (d *Storage) GetDomainByUser(userId string, domain string) (models.DomainInformation, error) {
+	domainInfo := models.DomainInformation{
+		DomainName: domain,
+		UserId:     userId,
+	}
+
+	key, err := domainInfo.GetKey()
+	if err != nil {
+		return models.DomainInformation{}, err
+	}
+
+	response, err := d.Client.GetItem(context.TODO(), &dynamodb.GetItemInput{
+		Key: key, TableName: aws.String(d.TableName),
+	})
+	if err != nil {
+		return models.DomainInformation{}, err
+	} else {
+		err = attributevalue.UnmarshalMap(response.Item, &domainInfo)
+		if err != nil {
+			return models.DomainInformation{}, err
+		}
+	}
+	return domainInfo, err
 }
 
 func (d *Storage) PutDomainInfo(info models.DomainInformation) error {
@@ -135,6 +193,42 @@ func (d *Storage) PutDomainInfo(info models.DomainInformation) error {
 	return err
 }
 
-func (d *Storage) DeleteDomain(userId string, domain string) {}
+func (d *Storage) DeleteDomain(userId string, domain string) error {
+	domainInfo := models.DomainInformation{
+		DomainName: domain,
+		UserId:     userId,
+	}
 
-func (d *Storage) DeleteUser(userId string) {}
+	key, err := domainInfo.GetKey()
+	if err != nil {
+		return err
+	}
+	_, err = d.Client.DeleteItem(context.TODO(), &dynamodb.DeleteItemInput{
+		TableName: aws.String(d.TableName), Key: key,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *Storage) GetAllRecords() ([]models.DomainInformation, error) {
+	p := dynamodb.NewScanPaginator(d.Client, &dynamodb.ScanInput{TableName: &d.TableName})
+
+	var domainInfos []models.DomainInformation
+	for p.HasMorePages() {
+		out, err := p.NextPage(context.TODO())
+		if err != nil {
+			return nil, err
+		}
+
+		var pItems []models.DomainInformation
+		err = attributevalue.UnmarshalListOfMaps(out.Items, &pItems)
+		if err != nil {
+			return nil, err
+		}
+
+		domainInfos = append(domainInfos, pItems...)
+	}
+	return domainInfos, nil
+}

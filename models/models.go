@@ -1,6 +1,8 @@
 package models
 
 import (
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/edwinavalos/dns-verifier/config"
 	"time"
 )
@@ -34,4 +36,17 @@ type DomainInformation struct {
 	LEVerification Verification `dynamodbav:"le_verification"`
 	Delegations    Delegations  `dynamodbav:"delegations"`
 	UserId         string       `dynamodbav:"user_id"`
+}
+
+func (domainInfo *DomainInformation) GetKey() (map[string]types.AttributeValue, error) {
+	userId, err := attributevalue.Marshal(domainInfo.UserId)
+	if err != nil {
+		return nil, err
+	}
+
+	domainName, err := attributevalue.Marshal(domainInfo.DomainName)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]types.AttributeValue{"user_id": userId, "domain_name": domainName}, nil
 }

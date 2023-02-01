@@ -47,7 +47,7 @@ func TestLocalDynamoStorage(t *testing.T) {
 				t.Errorf("storage.Initialize() err = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-
+			userId := uuid.New().String()
 			info := models.DomainInformation{
 				DomainName: "test.edwinavalos.com",
 				Verification: models.Verification{
@@ -72,12 +72,31 @@ func TestLocalDynamoStorage(t *testing.T) {
 					CNameWarningStamp:   time.Now(),
 					CNameExpireStamp:    time.Now(),
 				},
-				UserId: uuid.New().String(),
+				UserId: userId,
 			}
 
 			err = storage.PutDomainInfo(info)
 			if err != nil {
 				t.Errorf("storage.PutDomainInfo() err %v, wantErr %v", err, tt.wantErr)
+			}
+
+			domainInfo, err := storage.GetDomainByUser(userId, "test.edwinavalos.com")
+			if err != nil {
+				t.Errorf("storage.GetDomainByUser() err %v, wantErr %v", err, tt.wantErr)
+			}
+
+			t.Logf("DomainInfo: %+v", domainInfo)
+
+			userDomains, err := storage.GetUserDomains(userId)
+			if err != nil {
+				t.Errorf("storage.GetUserDomains() err %v, wantErr %v", err, tt.wantErr)
+			}
+
+			t.Logf("UserDomains: %+v", userDomains)
+
+			err = storage.DeleteDomain(userId, "test.edwinavalos.com")
+			if err != nil {
+				t.Errorf("storage.DeletDomain() err %v, wantErr %v", err, tt.wantErr)
 			}
 
 		})

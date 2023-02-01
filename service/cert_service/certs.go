@@ -1,7 +1,6 @@
 package cert_service
 
 import (
-	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -11,9 +10,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/logger"
-	"github.com/edwinavalos/dns-verifier/models"
-	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/lego"
@@ -27,14 +25,19 @@ import (
 )
 
 var cfg *config.Config
-var l logger.Logger
+var l *logger.Logger
 var externalIP net.IP
+var storage datastore.Datastore
+
+func SetStorage(toSet datastore.Datastore) {
+	storage = toSet
+}
 
 func SetConfig(conf *config.Config) {
 	cfg = conf
 }
 
-func SetLogger(toSet logger.Logger) {
+func SetLogger(toSet *logger.Logger) {
 	l = toSet
 }
 
@@ -115,19 +118,13 @@ func CompleteCertificateRequest(userId string, domain string, client *lego.Clien
 	if err != nil {
 		return "", err
 	}
-	// Need to save the cert URL to retrieve it without re-requesting if possible
-	val, ok := domain_service.VerificationMap.Load(userId)
-	if !ok {
-		return "", fmt.Errorf("domain: %s unable to lookup user in verification map")
-	}
-	domainInformation, ok := val.(models.DomainInformation)
-	if !ok {
-		return "", fmt.Errorf("domain: %s unable to convert verification map entry to DomainInformation")
-	}
 
-	ctx := context.Background()
-	domainInformation.LEVerification.Verified = true
-	err = domainInformation.SaveDomainInformation(ctx)
+	di, err := storage.GetDomainByUser(userId, domain)
+	if err != nil {
+		return "", err
+	}
+	di.LEVerification.Verified = true
+	err = storage.PutDomainInfo(di)
 	if err != nil {
 		return "", fmt.Errorf("domain: %s unable to save DomainInformation %w", err)
 	}
@@ -138,7 +135,7 @@ func CompleteCertificateRequest(userId string, domain string, client *lego.Clien
 	return "domain: %s saved to persistent storage", nil
 }
 
-func GetLEGOClient(userId string, domain string, email string) (*lego.Client, error) {
+func GetLEGOClient(email string) (*lego.Client, error) {
 	privateKey, err := getRequestUserCert()
 	if err != nil {
 		return nil, fmt.Errorf("unable to requestUserCert(): %w", err)
@@ -151,13 +148,16 @@ func GetLEGOClient(userId string, domain string, email string) (*lego.Client, er
 
 	leConfig := lego.NewConfig(&myUser)
 
-	// This CA URL is configured for a local dev instance of Boulder running in Docker in a VM.
-
 	leConfig.CADirURL = cfg.LESettings.CADirURL
 	leConfig.Certificate.KeyType = certcrypto.RSA2048
 
 	// A client facilitates communication with the CA server.
 	client, err := lego.NewClient(leConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 	if err != nil {
 		return nil, err
 	}
@@ -208,13 +208,13 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 		return "", "", fmt.Errorf("domain: %s unable to set new DNSProviderManual %w", domain, err)
 	}
 
-	err = provider.Present(domain, userId, cfg.LESettings.KeyAuth)
+	err = provider.PreSolve
 	if err != nil {
 		return "", "", fmt.Errorf("domain: %s unable to present challenge %w", domain, err)
 	}
 
 	// Because present has to satisfy an interface, we need to the information we wrote in it via DomainInformation lookups. Joy.
-	domainInfo, err := domain_service.DomainInfoByUserId(userId, domain)
+	domainInfo, err := storage.GetDomainByUser(userId, domain)
 	if err != nil {
 		return "", "", fmt.Errorf("domain: %s unable to get DomainInfo from verification map: %w", domain, err)
 	}

@@ -72,7 +72,7 @@ func HandleCompleteCertificateRequest(c *gin.Context) {
 		return
 	}
 
-	client, err := cert_service.GetLEGOClient(userId, domain, cfg.LESettings.AdminEmail)
+	client, err := cert_service.GetLEGOClient(cfg.LESettings.AdminEmail)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, CompleteCertificateRequestResp{
 			Error: fmt.Sprintf("domain: %s unable to create lego client: %s", domain, err),
