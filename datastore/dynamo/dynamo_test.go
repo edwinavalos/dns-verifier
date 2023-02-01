@@ -11,6 +11,15 @@ import (
 	"time"
 )
 
+func resetStorage(storage datastore.Datastore) error {
+	err := storage.DropTable()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func TestLocalDynamoStorage(t *testing.T) {
 	cfg := config.Config{
 		DB: config.DatabaseSettings{
@@ -41,6 +50,10 @@ func TestLocalDynamoStorage(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewStorage() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			err = resetStorage(storage)
+			if err != nil {
+				t.Fatalf("Unable to reset storage err was: %s", err)
 			}
 			err = storage.Initialize()
 			if err != nil {

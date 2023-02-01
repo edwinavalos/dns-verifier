@@ -58,6 +58,17 @@ func NewStorage() (datastore.Datastore, error) {
 	}, nil
 }
 
+func (d *Storage) GetTableName() string {
+	return d.TableName
+}
+
+func (d *Storage) DropTable() error {
+	d.Client.DeleteTable(context.TODO(), &dynamodb.DeleteTableInput{
+		TableName: &d.TableName,
+	})
+	return nil
+}
+
 func (d *Storage) tableExists() (bool, error) {
 	exists := true
 	_, err := d.Client.DescribeTable(
