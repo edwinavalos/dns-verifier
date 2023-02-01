@@ -13,6 +13,8 @@ type Datastore interface {
 	PutDomainInfo(information models.DomainInformation) error
 	DeleteDomain(userId string, domain string)
 	DeleteUser(userId string)
+	DropTable() error
+	GetTableName() string
 }
 
 func SetLogger(toSet *logger.Logger) {
