@@ -126,7 +126,7 @@ func CompleteCertificateRequest(userId string, domain string, client *lego.Clien
 	di.LEVerification.Verified = true
 	err = storage.PutDomainInfo(di)
 	if err != nil {
-		return "", fmt.Errorf("domain: %s unable to save DomainInformation %w", err)
+		return "", fmt.Errorf("domain: %s unable to save DomainInformation %w", domain, err)
 	}
 	// ... all done
 
@@ -208,7 +208,7 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 		return "", "", fmt.Errorf("domain: %s unable to set new DNSProviderManual %w", domain, err)
 	}
 
-	err = provider.PreSolve
+	err = provider.Present(domain, userId, cfg.LESettings.KeyAuth)
 	if err != nil {
 		return "", "", fmt.Errorf("domain: %s unable to present challenge %w", domain, err)
 	}

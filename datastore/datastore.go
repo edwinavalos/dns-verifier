@@ -14,6 +14,7 @@ type Datastore interface {
 	DeleteDomain(userId string, domain string) error
 	DropTable() error
 	GetTableName() string
+	GetAllRecords() ([]models.DomainInformation, error)
 }
 
 func SetLogger(toSet *logger.Logger) {

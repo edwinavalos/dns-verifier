@@ -2,15 +2,17 @@ package cert_service
 
 import (
 	"github.com/edwinavalos/dns-verifier/config"
+	"github.com/edwinavalos/dns-verifier/datastore"
+	"github.com/edwinavalos/dns-verifier/datastore/dynamo"
+	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/edwinavalos/dns-verifier/models"
-	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 	"github.com/google/uuid"
-	"sync"
+	"github.com/rs/zerolog"
 	"testing"
 )
 
@@ -18,6 +20,23 @@ func Test_requestCertificate(t *testing.T) {
 	testConfig := config.Config{}
 	testConfig.LESettings.PrivateKeyLocation = "C:\\mastodon\\private-key.pem"
 	testConfig.LESettings.CADirURL = lego.LEDirectoryStaging
+	testConfig.DB = config.DatabaseSettings{
+		TableName: "dns-verifier-test",
+		Region:    "us-east-1",
+		IsLocal:   true,
+	}
+	cfg = &testConfig
+	datastore.SetConfig(&testConfig)
+
+	dbStorage, err := dynamo.NewStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = dbStorage.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	storage = dbStorage
 	type args struct {
 		domain string
 		email  string
@@ -29,9 +48,9 @@ func Test_requestCertificate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test.amoslabs.cloud txt record",
+			name: "secondtest.amoslabs.cloud txt record",
 			args: args{
-				domain: "test.amoslabs.cloud",
+				domain: "secondtest.amoslabs.cloud",
 				email:  "admin@amoslabs.cloud",
 				userId: uuid.New().String(),
 			},
@@ -40,7 +59,6 @@ func Test_requestCertificate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg = &testConfig
 			if _, _, err := RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email); (err != nil) != tt.wantErr {
 				t.Errorf("RequestCertificate() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -49,6 +67,28 @@ func Test_requestCertificate(t *testing.T) {
 }
 
 func Test_completeCertificateRequest(t *testing.T) {
+	testConfig := config.Config{}
+	testConfig.DB = config.DatabaseSettings{
+		TableName: "dns-verifier-test",
+		Region:    "us-east-1",
+		IsLocal:   true,
+	}
+	cfg = &testConfig
+	datastore.SetConfig(&testConfig)
+	log := logger.Logger{Logger: zerolog.Logger{}}
+	SetLogger(&log)
+	datastore.SetLogger(&log)
+
+	dbStorage, err := dynamo.NewStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = dbStorage.Initialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	storage = dbStorage
+
 	privateKey, err := getRequestUserCert()
 	if err != nil {
 		t.Fatal(err)
@@ -92,9 +132,9 @@ func Test_completeCertificateRequest(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test.amoslabs.cloud",
+			name: "secondtest.amoslabs.cloud",
 			args: args{
-				domain: "test.amoslabs.cloud",
+				domain: "secondtest.amoslabs.cloud",
 				client: client,
 				email:  "admin@amoslabs.cloud",
 				userId: uuid.New().String(),
@@ -106,16 +146,14 @@ func Test_completeCertificateRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			domainInformation := models.DomainInformation{
-				DomainName:     tt.args.domain,
-				Verification:   models.Verification{},
-				LEVerification: models.Verification{},
-				Delegations:    models.Delegations{},
-				UserId:         tt.args.userId,
+				DomainName: tt.args.domain,
+				UserId:     tt.args.userId,
 			}
-
-			domain_service.VerificationMap = &sync.Map{}
-			domain_service.VerificationMap.Store(tt.args.domain, domainInformation)
-			_, _, err := RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email)
+			err := storage.PutDomainInfo(domainInformation)
+			if err != nil {
+				t.Error(err)
+			}
+			_, _, err = RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email)
 			if err != nil {
 				t.Errorf("RequestCertificate() err %v, wantErr: %v", err, tt.wantErr)
 				return
