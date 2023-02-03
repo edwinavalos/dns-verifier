@@ -15,10 +15,10 @@ import (
 
 var cfg *config.Config
 var l *logger.Logger
-var storage datastore.Datastore
+var dbStorage datastore.Datastore
 
-func SetStorage(toSet datastore.Datastore) {
-	storage = toSet
+func SetDBStorage(toSet datastore.Datastore) {
+	dbStorage = toSet
 }
 
 func SetConfig(conf *config.Config) {
@@ -36,7 +36,7 @@ var (
 )
 
 func SaveDomain(info models.DomainInformation) error {
-	err := storage.PutDomainInfo(info)
+	err := dbStorage.PutDomainInfo(info)
 	if err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func SaveDomain(info models.DomainInformation) error {
 }
 
 func GetAllRecords() (map[string]map[string]models.DomainInformation, error) {
-	records, err := storage.GetAllRecords()
+	records, err := dbStorage.GetAllRecords()
 	if err != nil {
 		return nil, err
 	}
@@ -62,21 +62,21 @@ func GetAllRecords() (map[string]map[string]models.DomainInformation, error) {
 }
 
 func PutDomain(userId string, domainName string) error {
-	return storage.PutDomainInfo(models.DomainInformation{DomainName: domainName, UserId: userId})
+	return dbStorage.PutDomainInfo(models.DomainInformation{DomainName: domainName, UserId: userId})
 }
 
 func DeleteDomain(userId string, domainName string) error {
-	return storage.DeleteDomain(userId, domainName)
+	return dbStorage.DeleteDomain(userId, domainName)
 }
 
 func GenerateOwnershipKey(userId string, domainName string) (string, error) {
-	di, err := storage.GetDomainByUser(userId, domainName)
+	di, err := dbStorage.GetDomainByUser(userId, domainName)
 	if err != nil {
 		return "", err
 	}
 
 	di.Verification.VerificationKey = fmt.Sprintf("%s;%s;%s", cfg.App.VerificationTxtRecordName, di.DomainName, utils.RandomString(30))
-	err = storage.PutDomainInfo(di)
+	err = dbStorage.PutDomainInfo(di)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +87,7 @@ func GenerateOwnershipKey(userId string, domainName string) (string, error) {
 // VerifyOwnership checks the TXT record for our verification string we give people
 func VerifyOwnership(ctx context.Context, userId string, domainName string) (bool, error) {
 
-	di, err := storage.GetDomainByUser(userId, domainName)
+	di, err := dbStorage.GetDomainByUser(userId, domainName)
 	if err != nil {
 		return false, err
 	}
@@ -121,7 +121,7 @@ func contains[T comparable](elems []T, v T) bool {
 
 func VerifyARecord(ctx context.Context, userId string, domainName string) (bool, error) {
 
-	di, err := storage.GetDomainByUser(userId, domainName)
+	di, err := dbStorage.GetDomainByUser(userId, domainName)
 	aRecords, err := net.LookupHost(di.DomainName)
 	if err != nil {
 		return false, err
@@ -139,7 +139,7 @@ func VerifyARecord(ctx context.Context, userId string, domainName string) (bool,
 
 func VerifyCNAME(ctx context.Context, userId string, domainName string) (bool, error) {
 
-	di, err := storage.GetDomainByUser(userId, domainName)
+	di, err := dbStorage.GetDomainByUser(userId, domainName)
 
 	cname, err := net.LookupCNAME(di.DomainName)
 	if err != nil {

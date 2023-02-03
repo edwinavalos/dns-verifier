@@ -2,7 +2,6 @@ package config
 
 import (
 	"context"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/spf13/viper"
 )
@@ -15,11 +14,8 @@ type LetsEncryptSettings struct {
 }
 
 type AWSSettings struct {
-	Region               string
-	BucketName           string
-	VerificationFileName string
-	CancelCtx            context.CancelFunc
-	S3Client             *s3.Client
+	Region     string
+	BucketName string
 }
 
 type AppSettings struct {
@@ -39,20 +35,18 @@ type DatabaseSettings struct {
 }
 
 type Config struct {
-	Aws        AWSSettings
+	AWS        AWSSettings
 	App        AppSettings
 	LESettings LetsEncryptSettings
 	DB         DatabaseSettings
 	Env        string
 	Network    NetworkSettings
-	RootCancel context.CancelFunc
 	RootCtx    context.Context
 }
 
 func (c *Config) ReadConfig() *Config {
-	c.Aws.Region = viper.GetString("aws.region")
-	c.Aws.BucketName = viper.GetString("aws.s3BucketName")
-	c.Aws.VerificationFileName = viper.GetString("aws.verificationFileName")
+	c.AWS.Region = viper.GetString("aws.region")
+	c.AWS.BucketName = viper.GetString("aws.s3BucketName")
 	c.App.VerificationTxtRecordName = viper.GetString("app.verificationTxtRecordName")
 	c.App.AlwaysRecreate = viper.GetBool("app.alwaysRecreate")
 	c.Network.OwnedHosts = viper.GetStringSlice("network.owned_hosts")
@@ -68,16 +62,15 @@ func (c *Config) ReadConfig() *Config {
 	c.DB.TableName = viper.GetString("db.table_name")
 	c.DB.Region = viper.GetString("db.region")
 	c.DB.IsLocal = viper.GetBool("db.is_local")
-	
+
 	return c
 }
 
 func NewConfig() *Config {
 	return &Config{
-		Aws: AWSSettings{
-			Region:               "us-west-2",
-			BucketName:           "test-bucket",
-			VerificationFileName: "example-file.json",
+		AWS: AWSSettings{
+			Region:     "us-west-2",
+			BucketName: "test-bucket",
 		},
 		App: AppSettings{
 			VerificationTxtRecordName: "mastodon_ownership_key",
@@ -86,7 +79,6 @@ func NewConfig() *Config {
 			OwnedHosts:  []string{"0.0.0.0"},
 			OwnedCNames: []string{"edwinavalos.com"},
 		},
-		RootCancel: nil,
-		RootCtx:    nil,
+		RootCtx: nil,
 	}
 }

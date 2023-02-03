@@ -23,3 +23,7 @@ func (logger Logger) Warnf(format string, args ...interface{}) {
 func (logger Logger) Errorf(format string, args ...interface{}) {
 	logger.Error().Msgf(format, args...)
 }
+
+func (logger Logger) Fatalf(format string, args ...interface{}) {
+	logger.Error().Msgf(format, args...)
+}

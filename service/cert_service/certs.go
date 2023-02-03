@@ -29,10 +29,10 @@ import (
 var cfg *config.Config
 var l *logger.Logger
 var externalIP net.IP
-var storage datastore.Datastore
+var dbStorage datastore.Datastore
 
-func SetStorage(toSet datastore.Datastore) {
-	storage = toSet
+func SetDBStorage(toSet datastore.Datastore) {
+	dbStorage = toSet
 }
 
 func SetConfig(conf *config.Config) {
@@ -114,7 +114,7 @@ func CompleteCertificateRequest(userId string, domain string, email string) ([][
 	}
 
 	// Retrieve our domain info from the database
-	domainInfo, err := storage.GetDomainByUser(userId, domain)
+	domainInfo, err := dbStorage.GetDomainByUser(userId, domain)
 	if err != nil {
 		return nil, fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
 	}
@@ -153,7 +153,7 @@ func CompleteCertificateRequest(userId string, domain string, email string) ([][
 		return nil, fmt.Errorf("CreateOrderCert: %v", err)
 	}
 	domainInfo.CertURL = curl
-	err = storage.PutDomainInfo(domainInfo)
+	err = dbStorage.PutDomainInfo(domainInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +301,7 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 	}
 
 	// Retrieve our domain info from the database
-	domainInfo, err := storage.GetDomainByUser(userId, domain)
+	domainInfo, err := dbStorage.GetDomainByUser(userId, domain)
 	if err != nil {
 		return "", "", fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
 	}
@@ -347,7 +347,7 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 		domainInfo.LEVerification.VerificationKey = token
 		domainInfo.OrderURL = u
 		domainInfo.CertURL = z.URI
-		err = storage.PutDomainInfo(domainInfo)
+		err = dbStorage.PutDomainInfo(domainInfo)
 		if err != nil {
 			return "", "", err
 		}

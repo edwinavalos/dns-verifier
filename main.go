@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	awsConfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/datastore/dynamo"
@@ -39,30 +36,13 @@ func main() {
 		panic(err)
 	}
 
-	cCtx, cancel := context.WithCancel(rootCtx)
-
 	appConfig := config.NewConfig()
 	appConfig.RootCtx = rootCtx
-	appConfig.Aws.CancelCtx = cancel
 	appConfig.ReadConfig()
 
-	if appConfig.Aws.BucketName == "" || appConfig.Aws.VerificationFileName == "" {
-		log.Fatal().Msgf("did not have enough information to get or create domain_service file")
-		log.Debug().Msgf("bucketName: {%s}, verificationFileName {%s}", appConfig.Aws.BucketName, appConfig.Aws.VerificationFileName)
-		panic(fmt.Errorf("missing aws configuration"))
-	}
-
-	cfg, err := awsConfig.LoadDefaultConfig(cCtx, awsConfig.WithRegion(appConfig.Aws.Region))
-	if err != nil {
-		log.Panic().Msg("unable to load default aws appConfig")
-		panic(err)
-	}
-
-	awsS3Client := s3.NewFromConfig(cfg)
-	appConfig.Aws.S3Client = awsS3Client
 	SetConfigs(appConfig)
 
-	storage, err := dynamo.NewStorage()
+	storage, err := dynamo.NewStorage(appConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -73,8 +53,8 @@ func main() {
 	}
 
 	// At some point we can pass in a polymorphic configuration
-	domain_service.SetStorage(storage)
-	cert_service.SetStorage(storage)
+	domain_service.SetDBStorage(storage)
+	cert_service.SetDBStorage(storage)
 	srv := server.NewServer()
 	srv.ListenAndServe()
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/models"
 	"time"
@@ -21,10 +22,10 @@ type Storage struct {
 	Client    *dynamodb.Client
 }
 
-func NewStorage() (datastore.Datastore, error) {
+func NewStorage(cfg *config.Config) (datastore.Datastore, error) {
 	var conf aws.Config
 	var err error
-	if datastore.Config.DB.IsLocal {
+	if cfg.DB.IsLocal {
 		conf, err = aws_config.LoadDefaultConfig(context.TODO(),
 			aws_config.WithRegion("us-east-1"),
 			aws_config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
@@ -53,7 +54,7 @@ func NewStorage() (datastore.Datastore, error) {
 
 	dynamodbClient := dynamodb.NewFromConfig(conf)
 	return &Storage{
-		TableName: datastore.Config.DB.TableName,
+		TableName: cfg.DB.TableName,
 		Client:    dynamodbClient,
 	}, nil
 }

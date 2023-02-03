@@ -11,6 +11,7 @@ db:
 app:
   verificationTxtRecordName: "mastodon_ownership_key"
   alwaysRecreate: false
+
 network:
   owned_hosts:
     - 34.217.225.51

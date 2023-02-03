@@ -30,7 +30,7 @@ package domain_service
 //				UserId: uuid.UUID{},
 //			},
 //			config: &config.Config{
-//				Aws: config.AWSSettings{},
+//				AWS: config.AWSSettings{},
 //				App: config.AppSettings{
 //					VerificationTxtRecordName: "mastodon_ownership_key_test",
 //				},
@@ -56,7 +56,7 @@ package domain_service
 //					UserId: uuid.UUID{},
 //				},
 //				config: &config.Config{
-//					Aws: config.AWSSettings{},
+//					AWS: config.AWSSettings{},
 //					App: config.AppSettings{
 //						VerificationTxtRecordName: "mastodon_ownership_key_test",
 //					},

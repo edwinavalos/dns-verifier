@@ -31,7 +31,7 @@ func Test_requestCertificate(t *testing.T) {
 	datastore.SetLogger(&log)
 	SetLogger(&log)
 
-	dbStorage, err := dynamo.NewStorage()
+	dbStorage, err := dynamo.NewStorage(&testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func Test_requestCertificate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storage = dbStorage
+	dbStorage = dbStorage
 	type args struct {
 		domain string
 		email  string
@@ -90,7 +90,7 @@ func Test_completeCertificateRequest(t *testing.T) {
 	SetLogger(&log)
 	datastore.SetLogger(&log)
 
-	dbStorage, err := dynamo.NewStorage()
+	dbStorage, err := dynamo.NewStorage(&testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func Test_completeCertificateRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storage = dbStorage
+	dbStorage = dbStorage
 
 	type args struct {
 		domain string
@@ -128,7 +128,7 @@ func Test_completeCertificateRequest(t *testing.T) {
 				DomainName: tt.args.domain,
 				UserId:     tt.args.userId,
 			}
-			err := storage.PutDomainInfo(domainInformation)
+			err := dbStorage.PutDomainInfo(domainInformation)
 			if err != nil {
 				t.Error(err)
 			}

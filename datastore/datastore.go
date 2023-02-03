@@ -18,6 +18,12 @@ type Datastore interface {
 	GetAllRecords() ([]models.DomainInformation, error)
 }
 
+type FileStore interface {
+	Initialize(cfg *config.Config) error
+	SaveFile(sourcePath string, destinationPath string) error
+	GetFile(sourcePath string, destinationPath string) error
+}
+
 func SetLogger(toSet *logger.Logger) {
 	Log = toSet
 }
