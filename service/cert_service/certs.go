@@ -1,6 +1,7 @@
 package cert_service
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -9,13 +10,14 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/aws/smithy-go/rand"
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/logger"
-	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
-	"github.com/go-acme/lego/v4/lego"
+	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/registration"
+	"golang.org/x/crypto/acme"
 	"net"
 	"os"
 	"path/filepath"
@@ -99,127 +101,263 @@ func getRequestUserCert() (*ecdsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func CompleteCertificateRequest(userId string, domain string, client *lego.Client) (string, error) {
-	manualProvider, err := NewDNSProviderManual()
-	if err != nil {
-		return "", err
-	}
-
-	err = client.Challenge.SetDNS01Provider(manualProvider)
-	if err != nil {
-		return "", err
-	}
-
-	request := certificate.ObtainRequest{
-		Domains: []string{domain},
-		Bundle:  true,
-	}
-	certificates, err := client.Certificate.Obtain(request)
-	if err != nil {
-		return "", err
-	}
-
-	di, err := storage.GetDomainByUser(userId, domain)
-	if err != nil {
-		return "", err
-	}
-	di.LEVerification.Verified = true
-	err = storage.PutDomainInfo(di)
-	if err != nil {
-		return "", fmt.Errorf("domain: %s unable to save DomainInformation %w", domain, err)
-	}
-	// ... all done
-
-	// Place the certificate into storage that is shared between our servers, and then send back a positive string
-	l.Infof("%+v", string(certificates.Certificate))
-	return "domain: %s saved to persistent storage", nil
-}
-
-func GetLEGOClient(email string) (*lego.Client, error) {
+func CompleteCertificateRequest(userId string, domain string, email string) ([][]byte, error) {
 	privateKey, err := getRequestUserCert()
 	if err != nil {
 		return nil, fmt.Errorf("unable to requestUserCert(): %w", err)
 	}
 
-	myUser := certRequestUser{
-		Email: email,
-		key:   privateKey,
+	// Create our client which will interact with the acme api
+	client := &acme.Client{
+		Key:          privateKey,
+		DirectoryURL: cfg.LESettings.CADirURL,
 	}
 
-	leConfig := lego.NewConfig(&myUser)
+	// Retrieve our domain info from the database
+	domainInfo, err := storage.GetDomainByUser(userId, domain)
+	if err != nil {
+		return nil, fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
+	}
 
-	leConfig.CADirURL = cfg.LESettings.CADirURL
-	leConfig.Certificate.KeyType = certcrypto.RSA2048
+	identifiers := acme.DomainIDs(domain)
+	authOrder, err := client.AuthorizeOrder(context.TODO(), identifiers)
+	if err != nil {
+		return nil, fmt.Errorf("AuthorizeOrder: %v", err)
+	}
 
-	// A client facilitates communication with the CA server.
-	client, err := lego.NewClient(leConfig)
+	authz, err := client.GetAuthorization(context.TODO(), domainInfo.OrderURL)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+	var chal *acme.Challenge
+	for i, c := range authz.Challenges {
+		l.Infof("challenge %d: %+v", i, c)
+		if c.Type == challenge.DNS01.String() {
+			l.Infof("picked %s for authz %s", c.URI, authz.URI)
+			chal = c
+		}
+	}
+	if chal == nil {
+		return nil, fmt.Errorf("challenge type %q wasn't offered for authz %s", challenge.DNS01, authz.URI)
+	}
+
+	err = completeDNS01(context.TODO(), client, authz, chal, authOrder)
 	if err != nil {
 		return nil, err
 	}
 
-	return client, nil
+	csr, privateKey := newCSR(identifiers)
+	ders, curl, err := client.CreateOrderCert(context.TODO(), authOrder.FinalizeURL, csr, true)
+	if err != nil {
+		return nil, fmt.Errorf("CreateOrderCert: %v", err)
+	}
+	domainInfo.CertURL = curl
+	err = storage.PutDomainInfo(domainInfo)
+	if err != nil {
+		return nil, err
+	}
+	l.Infof("cert URL: %s", curl)
+
+	keyBytes, err := x509.MarshalECPrivateKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Encode the private key into PEM format
+	privateKeyPEM := &pem.Block{
+		Type:  "ECDSA PRIVATE KEY",
+		Bytes: keyBytes,
+	}
+
+	// Write the private key to a file
+	privateKeyFile, err := os.Create("private.pem")
+	if err != nil {
+		return nil, err
+	}
+	defer privateKeyFile.Close()
+
+	err = pem.Encode(privateKeyFile, privateKeyPEM)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, der := range ders {
+		cert, err := x509.ParseCertificate(der)
+		if err != nil {
+			return nil, err
+		}
+		// Encode the certificate into PEM format
+		certificatePEM := &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: cert.Raw,
+		}
+
+		// Write the certificate to a file
+		certificateFile, err := os.Create(fmt.Sprintf("%s.crt", cert.Subject.CommonName))
+		if err != nil {
+			return nil, err
+		}
+		defer certificateFile.Close()
+
+		err = pem.Encode(certificateFile, certificatePEM)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Println("Certificate written to file")
+	}
+
+	fmt.Println("Private key written to file private.pem")
+	return ders, nil
+}
+
+func newCSR(identifiers []acme.AuthzID) ([]byte, *ecdsa.PrivateKey) {
+	var csr x509.CertificateRequest
+	for _, id := range identifiers {
+		switch id.Type {
+		case "dns":
+			csr.DNSNames = append(csr.DNSNames, id.Value)
+		case "ip":
+			csr.IPAddresses = append(csr.IPAddresses, net.ParseIP(id.Value))
+		default:
+			panic(fmt.Sprintf("newCSR: unknown identifier type %q", id.Type))
+		}
+	}
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(fmt.Sprintf("newCSR: ecdsa.GenerateKey for a cert: %v", err))
+	}
+	b, err := x509.CreateCertificateRequest(rand.Reader, &csr, k)
+	if err != nil {
+		panic(fmt.Sprintf("newCSR: x509.CreateCertificateRequest: %v", err))
+	}
+	return b, k
+}
+
+func runDNS01(ctx context.Context, client *acme.Client, z *acme.Authorization, chal *acme.Challenge) (string, string, error) {
+	token, err := client.DNS01ChallengeRecord(chal.Token)
+	if err != nil {
+		return "", "", fmt.Errorf("DNS01ChallengeRecord: %v", err)
+	}
+
+	//if _, err := client.Accept(ctx, chal); err != nil {
+	//	return "", "", fmt.Errorf("accept(%q): %v", chal.URI, err)
+	//}
+
+	return fmt.Sprintf("_acme-challenge.%s", z.Identifier.Value), token, nil
+}
+
+func completeDNS01(ctx context.Context, client *acme.Client, z *acme.Authorization, chal *acme.Challenge, order *acme.Order) error {
+	if _, err := client.Accept(ctx, chal); err != nil {
+		return fmt.Errorf("accept(%q): %v", chal.URI, err)
+	}
+
+	_, err := client.WaitAuthorization(context.TODO(), z.URI)
+	if err != nil {
+		return err
+	}
+
+	l.Infof("all challenges are done")
+	if _, err := client.WaitOrder(ctx, order.URI); err != nil {
+		return fmt.Errorf("waitOrder(%q): %v", order.URI, err)
+	}
+
+	return nil
+}
+
+func request(ctx context.Context, client *acme.Client, z *acme.Authorization) (string, string, error) {
+	var chal *acme.Challenge
+	for i, c := range z.Challenges {
+		l.Infof("challenge %d: %+v", i, c)
+		if c.Type == challenge.DNS01.String() {
+			l.Infof("picked %s for authz %s", c.URI, z.URI)
+			chal = c
+		}
+	}
+	if chal == nil {
+		return "", "", fmt.Errorf("challenge type %q wasn't offered for authz %s", challenge.DNS01, z.URI)
+	}
+
+	zone, token, err := runDNS01(ctx, client, z, chal)
+	if err != nil {
+		return "", "", err
+	}
+	return zone, token, nil
 }
 
 func RequestCertificate(userId string, domain string, email string) (string, string, error) {
-	// Create a user. New accounts need an email and private key to start.
 
+	// Get the private key for the cert administrator account
 	privateKey, err := getRequestUserCert()
 	if err != nil {
 		return "", "", fmt.Errorf("unable to requestUserCert(): %w", err)
 	}
 
-	myUser := certRequestUser{
-		Email: email,
-		key:   privateKey,
+	// Create our client which will interact with the acme api
+	client := &acme.Client{
+		Key:          privateKey,
+		DirectoryURL: cfg.LESettings.CADirURL,
 	}
 
-	leConfig := lego.NewConfig(&myUser)
-
-	// This CA URL is configured for a local dev instance of Boulder running in Docker in a VM.
-
-	leConfig.CADirURL = cfg.LESettings.CADirURL
-	leConfig.Certificate.KeyType = certcrypto.RSA2048
-
-	// A client facilitates communication with the CA server.
-	client, err := lego.NewClient(leConfig)
-	if err != nil {
-		return "", "", err
-	}
-
-	// New users will need to register
-	reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
-	if err != nil {
-		return "", "", err
-	}
-	myUser.Registration = reg
-
-	provider, err := NewDNSProviderManual()
-	if err != nil {
-		return "", "", fmt.Errorf("domain: %s unable to create new DNSProviderManual %w", domain, err)
-	}
-
-	err = client.Challenge.SetDNS01Provider(provider)
-	if err != nil {
-		return "", "", fmt.Errorf("domain: %s unable to set new DNSProviderManual %w", domain, err)
-	}
-
-	err = provider.Present(domain, userId, cfg.LESettings.KeyAuth)
-	if err != nil {
-		return "", "", fmt.Errorf("domain: %s unable to present challenge %w", domain, err)
-	}
-
-	// Because present has to satisfy an interface, we need to the information we wrote in it via DomainInformation lookups. Joy.
+	// Retrieve our domain info from the database
 	domainInfo, err := storage.GetDomainByUser(userId, domain)
 	if err != nil {
-		return "", "", fmt.Errorf("domain: %s unable to get DomainInfo from verification map: %w", domain, err)
+		return "", "", fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
 	}
 
-	return domainInfo.LEVerification.VerificationZone, domainInfo.LEVerification.VerificationKey, nil
+	// Log in and get our account information
+	//var account *acme.Account
+	if domainInfo.CertURL != "" {
+		// the url parameter is legacy and not used
+		_, err = client.GetReg(context.TODO(), "")
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		_, err = client.UpdateReg(context.TODO(), &acme.Account{})
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	// Identifiers is an acme construct for our domain names
+	identifiers := acme.DomainIDs(domain)
+
+	// We create an order for our domain name, this is key to authorizing everything
+	// this kicks off the process
+	authOrder, err := client.AuthorizeOrder(context.TODO(), identifiers)
+	if err != nil {
+		return "", "", err
+	}
+
+	var zurls []string
+	for _, u := range authOrder.AuthzURLs {
+		z, err := client.GetAuthorization(context.TODO(), u)
+		if err != nil {
+			return "", "", fmt.Errorf("GetAuthorization(%q): %v", u, err)
+		}
+		l.Infof("Authorizations: %+v", z)
+		if z.Status != acme.StatusPending {
+			l.Infof("authz status is %q; skipping", z.Status)
+			continue
+		}
+		zone, token, err := request(context.TODO(), client, z)
+		domainInfo.LEVerification.VerificationZone = zone
+		domainInfo.LEVerification.VerificationKey = token
+		domainInfo.OrderURL = u
+		domainInfo.CertURL = z.URI
+		err = storage.PutDomainInfo(domainInfo)
+		if err != nil {
+			return "", "", err
+		}
+		zurls = append(zurls, z.URI)
+		l.Infof("authorized for %+v", z.Identifier)
+		return domainInfo.LEVerification.VerificationZone, domainInfo.LEVerification.VerificationKey, nil
+	}
+
+	return "", "", fmt.Errorf("no dns01 challenges to complete")
+
 }
 
 func contains[T comparable](elems []T, v T) bool {
@@ -238,73 +376,6 @@ func toStringList(ips []net.IP) []string {
 	}
 	return retList
 }
-
-// Saving this for later, I think I need something like it in the envoy manager, but it will not be doing certificate
-// operations anymore
-//func RequestCerts() error {
-//
-//	l.Infof("My outbound IP for this loop is %s", externalIP.String())
-//
-//	l.Infof("Starting the big loop")
-//	networkMap := gatherer.GetNetworkMap()
-//	for domain, val := range networkMap {
-//		for _, port := range val {
-//			if port.ContainerPort == 443 {
-//				ipRecords, err := net.LookupIP(domain)
-//				if err != nil {
-//					l.Errorf("domain: %s failed to lookup IP err: %s", domain, err)
-//					continue
-//				}
-//				if !contains(toStringList(ipRecords), externalIP.String()) {
-//					l.Errorf("domain: %s there isnt a dns entry for this domain pointing to us records were: %+v, skipping", domain, ipRecords)
-//					continue
-//				}
-//				parts := strings.Split(port.Service, ":")
-//				exists, valid, err := CertificateExistsAndValid(domain, parts[0])
-//				if err != nil {
-//					l.Errorf("domain: %s error figuring out if cert for is valid or exist: %s... will not generate", domain, err)
-//					continue
-//				}
-//				var certificates *certificate.Resource
-//				if !exists {
-//					l.Infof("domain: %s cert file does not exist... attempting creation", domain)
-//					err = RequestCertificate(domain, cfg.LESettings.AdminEmail)
-//					if err != nil {
-//						l.Errorf("unable to request certificate from Let's Encrypt for domain: %s, err: %s", domain, err)
-//						continue
-//					}
-//					exists = true
-//					valid = true
-//				}
-//
-//				if !valid {
-//					l.Infof("domain %s certificate is expired... will generate", domain)
-//					err = RequestCertificate(domain, cfg.LESettings.AdminEmail)
-//					if err != nil {
-//						l.Errorf("unable to request certificate from Let's Encrypt for domain: %s, err: %s", domain, err)
-//						continue
-//					}
-//					valid = true
-//				}
-//
-//				publicKeyLocation, privateKeyLocation, err := DomainToKeyLocations(domain, parts[0])
-//				if err != nil {
-//					l.Errorf("domain: %s unable to get locations for saving keys: %s", domain, err)
-//					continue
-//				}
-//				basePath := filepath.Base(publicKeyLocation)
-//				err = saveCertificates(publicKeyLocation, privateKeyLocation, basePath, certificates)
-//				if err != nil {
-//					l.Errorf("domain: %s unable to save certicates, err: %s", domain, err)
-//				}
-//				l.Infof("successfully generated certificates for: %s", domain)
-//			}
-//		}
-//	}
-//	l.Infof("ending the big loop")
-//
-//	return nil
-//}
 
 func saveCertificates(publicKeyLocation string, privateKeyLocation string, basePath string, certificates *certificate.Resource) error {
 	generatedLocation := filepath.Join(basePath + "/keys/.generated")

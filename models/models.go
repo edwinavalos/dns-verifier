@@ -36,6 +36,9 @@ type DomainInformation struct {
 	LEVerification Verification `dynamodbav:"le_verification"`
 	Delegations    Delegations  `dynamodbav:"delegations"`
 	UserId         string       `dynamodbav:"user_id"`
+	CertURL        string       `dynamodbav:"cert_url"`
+	OrderURL       string       `dynamodbav:"order_url"`
+	CSRCertURL     string       `dynamodbav:"csr_cert_url"`
 }
 
 func (domainInfo *DomainInformation) GetKey() (map[string]types.AttributeValue, error) {

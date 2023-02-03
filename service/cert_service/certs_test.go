@@ -1,32 +1,35 @@
 package cert_service
 
 import (
+	"crypto/x509"
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/datastore/dynamo"
 	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/edwinavalos/dns-verifier/models"
-	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
-	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/registration"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"testing"
+	"time"
 )
 
 func Test_requestCertificate(t *testing.T) {
 	testConfig := config.Config{}
 	testConfig.LESettings.PrivateKeyLocation = "C:\\mastodon\\private-key.pem"
 	testConfig.LESettings.CADirURL = lego.LEDirectoryStaging
+	testConfig.LESettings.KeyAuth = "asufficientlylongenoughstringwithenoughentropy"
 	testConfig.DB = config.DatabaseSettings{
 		TableName: "dns-verifier-test",
 		Region:    "us-east-1",
 		IsLocal:   true,
 	}
 	cfg = &testConfig
+	log := logger.Logger{Logger: zerolog.Logger{}}
 	datastore.SetConfig(&testConfig)
+	datastore.SetLogger(&log)
+	SetLogger(&log)
 
 	dbStorage, err := dynamo.NewStorage()
 	if err != nil {
@@ -59,15 +62,23 @@ func Test_requestCertificate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, _, err := RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email); (err != nil) != tt.wantErr {
-				t.Errorf("RequestCertificate() error = %v, wantErr %v", err, tt.wantErr)
+			fqdn, key, err := RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email)
+			if err != nil {
+				t.Fatal(err)
 			}
+			t.Logf("%s %s", fqdn, key)
 		})
 	}
 }
 
 func Test_completeCertificateRequest(t *testing.T) {
 	testConfig := config.Config{}
+	testConfig.LESettings = config.LetsEncryptSettings{
+		AdminEmail:         "admin@amoslabs.cloud",
+		PrivateKeyLocation: "C:\\mastodon\\private-key.pem",
+		KeyAuth:            "asufficientlylongenoughstringwithenoughentropy",
+		CADirURL:           lego.LEDirectoryStaging,
+	}
 	testConfig.DB = config.DatabaseSettings{
 		TableName: "dns-verifier-test",
 		Region:    "us-east-1",
@@ -89,41 +100,10 @@ func Test_completeCertificateRequest(t *testing.T) {
 	}
 	storage = dbStorage
 
-	privateKey, err := getRequestUserCert()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	myUser := certRequestUser{
-		Email: "admin@amoslabs.cloud",
-		key:   privateKey,
-	}
-
-	leConfig := lego.NewConfig(&myUser)
-
-	// This CA URL is configured for a local dev instance of Boulder running in Docker in a VM.
-
-	leConfig.CADirURL = cfg.LESettings.CADirURL
-	leConfig.Certificate.KeyType = certcrypto.RSA2048
-
-	// A client facilitates communication with the CA server.
-	client, err := lego.NewClient(leConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	myUser.Registration = reg
-
 	type args struct {
-		domain         string
-		client         *lego.Client
-		manualProvider *challenge.Provider
-		email          string
-		userId         string
+		domain string
+		email  string
+		userId string
 	}
 	tests := []struct {
 		name    string
@@ -135,9 +115,8 @@ func Test_completeCertificateRequest(t *testing.T) {
 			name: "secondtest.amoslabs.cloud",
 			args: args{
 				domain: "secondtest.amoslabs.cloud",
-				client: client,
 				email:  "admin@amoslabs.cloud",
-				userId: uuid.New().String(),
+				userId: "2c84b63c-9a96-11ed-a8fc-0242ac120002",
 			},
 			want:    nil,
 			wantErr: false,
@@ -153,15 +132,26 @@ func Test_completeCertificateRequest(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			_, _, err = RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email)
+			zone, key, err := RequestCertificate(tt.args.userId, tt.args.domain, tt.args.email)
 			if err != nil {
 				t.Errorf("RequestCertificate() err %v, wantErr: %v", err, tt.wantErr)
 				return
 			}
-			_, err = CompleteCertificateRequest(tt.args.userId, tt.args.domain, tt.args.client)
+			t.Logf("zone: %s key: %s", zone, key)
+
+			time.Sleep(300 * time.Second)
+
+			ders, err := CompleteCertificateRequest(tt.args.userId, tt.args.domain, tt.args.email)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CompleteCertificateRequest() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			}
+			for _, der := range ders {
+				cert, err := x509.ParseCertificate(der)
+				if err != nil {
+					return
+				}
+				t.Logf("Certificate: \n%s", string(cert.Raw))
 			}
 		})
 	}

@@ -243,3 +243,25 @@ func (d *Storage) GetAllRecords() ([]models.DomainInformation, error) {
 	}
 	return domainInfos, nil
 }
+
+//func (d *Storage) GetDomainByToken(token string, domain string) (models.DomainInformation, error) {
+//	domainInfo := models.DomainInformation{}
+//
+//	key, err := domainInfo.GetKey()
+//	if err != nil {
+//		return models.DomainInformation{}, err
+//	}
+//
+//	response, err := d.Client.GetItem(context.TODO(), &dynamodb.GetItemInput{
+//		Key: key, TableName: aws.String(d.TableName),
+//	})
+//	if err != nil {
+//		return models.DomainInformation{}, err
+//	} else {
+//		err = attributevalue.UnmarshalMap(response.Item, &domainInfo)
+//		if err != nil {
+//			return models.DomainInformation{}, err
+//		}
+//	}
+//	return domainInfo, err
+//}

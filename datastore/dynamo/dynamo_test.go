@@ -85,7 +85,8 @@ func TestLocalDynamoStorage(t *testing.T) {
 					CNameWarningStamp:   time.Now(),
 					CNameExpireStamp:    time.Now(),
 				},
-				UserId: userId,
+				UserId:        userId,
+				ExternalToken: "",
 			}
 
 			err = storage.PutDomainInfo(info)

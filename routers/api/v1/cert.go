@@ -72,15 +72,7 @@ func HandleCompleteCertificateRequest(c *gin.Context) {
 		return
 	}
 
-	client, err := cert_service.GetLEGOClient(cfg.LESettings.AdminEmail)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, CompleteCertificateRequestResp{
-			Error: fmt.Sprintf("domain: %s unable to create lego client: %s", domain, err),
-		})
-		return
-	}
-
-	message, err := cert_service.CompleteCertificateRequest(userId, domain, client)
+	_, err = cert_service.CompleteCertificateRequest(userId, domain, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, CompleteCertificateRequestResp{
 			Error: fmt.Sprintf("domain: %s, unable to complete certificate request: %s", domain, err),
@@ -88,9 +80,18 @@ func HandleCompleteCertificateRequest(c *gin.Context) {
 		return
 	}
 
+	//for _, der := range ders {
+	//	cert, err := x509.ParseCertificate(der)
+	//	if err != nil {
+	//		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+	//		return
+	//	}
+	//	log.Infof("cert: %s \n%s", cert.Subject, string(cert.Raw))
+	//}
+
 	c.JSON(http.StatusInternalServerError, CompleteCertificateRequestResp{
 		Domain:  domain,
-		Message: message,
+		Message: "got a cert",
 	})
 	return
 }
