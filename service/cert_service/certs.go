@@ -1,6 +1,7 @@
 package cert_service
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -30,9 +31,14 @@ var cfg *config.Config
 var l *logger.Logger
 var externalIP net.IP
 var dbStorage datastore.Datastore
+var fileStorage datastore.FileStore
 
 func SetDBStorage(toSet datastore.Datastore) {
 	dbStorage = toSet
+}
+
+func SetFileStorage(toSet datastore.FileStore) {
+	fileStorage = toSet
 }
 
 func SetConfig(conf *config.Config) {
@@ -170,45 +176,28 @@ func CompleteCertificateRequest(userId string, domain string, email string) ([][
 		Bytes: keyBytes,
 	}
 
-	// Write the private key to a file
-	privateKeyFile, err := os.Create("private.pem")
+	// Encode the PEM block to a byte buffer.
+	var privBuf bytes.Buffer
+	err = pem.Encode(&privBuf, privateKeyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode PEM block: %v\n", err)
+	}
+
+	err = fileStorage.SaveBuf(privBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.key", domain))
 	if err != nil {
 		return nil, err
 	}
-	defer privateKeyFile.Close()
 
-	err = pem.Encode(privateKeyFile, privateKeyPEM)
+	var mergedDers []byte
+	for _, slice := range ders {
+		mergedDers = append(mergedDers, slice...)
+	}
+	secondBuf := bytes.NewBuffer(mergedDers)
+	err = fileStorage.SaveBuf(*secondBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.crt", domain))
 	if err != nil {
 		return nil, err
 	}
 
-	for _, der := range ders {
-		cert, err := x509.ParseCertificate(der)
-		if err != nil {
-			return nil, err
-		}
-		// Encode the certificate into PEM format
-		certificatePEM := &pem.Block{
-			Type:  "CERTIFICATE",
-			Bytes: cert.Raw,
-		}
-
-		// Write the certificate to a file
-		certificateFile, err := os.Create(fmt.Sprintf("%s.crt", cert.Subject.CommonName))
-		if err != nil {
-			return nil, err
-		}
-		defer certificateFile.Close()
-
-		err = pem.Encode(certificateFile, certificatePEM)
-		if err != nil {
-			return nil, err
-		}
-
-		fmt.Println("Certificate written to file")
-	}
-
-	fmt.Println("Private key written to file private.pem")
 	return ders, nil
 }
 

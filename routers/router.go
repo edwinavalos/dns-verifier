@@ -1,9 +1,16 @@
 package routers
 
 import (
+	"github.com/edwinavalos/dns-verifier/logger"
 	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/gin-gonic/gin"
 )
+
+var Log *logger.Logger
+
+func SetLogger(toSet *logger.Logger) {
+	Log = toSet
+}
 
 func InitRouter() *gin.Engine {
 	r := gin.Default()

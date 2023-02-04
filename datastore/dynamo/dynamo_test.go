@@ -46,7 +46,7 @@ func TestLocalDynamoStorage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage, err := NewStorage()
+			storage, err := NewStorage(cfg.DB)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewStorage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -85,8 +85,7 @@ func TestLocalDynamoStorage(t *testing.T) {
 					CNameWarningStamp:   time.Now(),
 					CNameExpireStamp:    time.Now(),
 				},
-				UserId:        userId,
-				ExternalToken: "",
+				UserId: userId,
 			}
 
 			err = storage.PutDomainInfo(info)

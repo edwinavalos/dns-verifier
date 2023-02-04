@@ -5,6 +5,7 @@ import (
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/datastore/dynamo"
+	"github.com/edwinavalos/dns-verifier/datastore/s3_filestore"
 	"github.com/edwinavalos/dns-verifier/logger"
 	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/edwinavalos/dns-verifier/server"
@@ -25,7 +26,7 @@ func main() {
 		Logger: zerolog.Logger{},
 	}
 
-	SetLoggers(rootLogger)
+	setLoggers(rootLogger)
 
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -40,33 +41,53 @@ func main() {
 	appConfig.RootCtx = rootCtx
 	appConfig.ReadConfig()
 
-	SetConfigs(appConfig)
+	setConfigs(appConfig)
 
-	storage, err := dynamo.NewStorage(appConfig)
+	dbStorage, err := dynamo.NewStorage(appConfig.DB)
 	if err != nil {
 		panic(err)
 	}
 
-	err = storage.Initialize()
+	err = dbStorage.Initialize()
 	if err != nil {
 		panic(err)
 	}
 
-	// At some point we can pass in a polymorphic configuration
-	domain_service.SetDBStorage(storage)
-	cert_service.SetDBStorage(storage)
+	setDBStorage(dbStorage)
+
+	fileStore, err := s3_filestore.NewS3Storage()
+	if err != nil {
+		panic(err)
+	}
+	err = fileStore.Initialize(&appConfig.CloudProvider)
+	if err != nil {
+		panic(err)
+	}
+
+	setFileStorage(fileStore)
+
 	srv := server.NewServer()
 	srv.ListenAndServe()
 }
 
-func SetConfigs(appConfig *config.Config) {
+func setFileStorage(store datastore.FileStore) {
+	cert_service.SetFileStorage(store)
+}
+
+func setDBStorage(storage datastore.Datastore) {
+	// At some point we can pass in a polymorphic configuration
+	domain_service.SetDBStorage(storage)
+	cert_service.SetDBStorage(storage)
+}
+
+func setConfigs(appConfig *config.Config) {
 	domain_service.SetConfig(appConfig)
 	v1.SetConfig(appConfig)
 	cert_service.SetConfig(appConfig)
 	datastore.SetConfig(appConfig)
 }
 
-func SetLoggers(rootLogger logger.Logger) {
+func setLoggers(rootLogger logger.Logger) {
 	domain_service.SetLogger(&rootLogger)
 	cert_service.SetLogger(&rootLogger)
 	v1.SetLogger(&rootLogger)

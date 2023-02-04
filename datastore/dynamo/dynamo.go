@@ -22,10 +22,10 @@ type Storage struct {
 	Client    *dynamodb.Client
 }
 
-func NewStorage(cfg *config.Config) (datastore.Datastore, error) {
+func NewStorage(dbCfg config.DatabaseSettings) (datastore.Datastore, error) {
 	var conf aws.Config
 	var err error
-	if cfg.DB.IsLocal {
+	if dbCfg.IsLocal {
 		conf, err = aws_config.LoadDefaultConfig(context.TODO(),
 			aws_config.WithRegion("us-east-1"),
 			aws_config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
@@ -54,7 +54,7 @@ func NewStorage(cfg *config.Config) (datastore.Datastore, error) {
 
 	dynamodbClient := dynamodb.NewFromConfig(conf)
 	return &Storage{
-		TableName: cfg.DB.TableName,
+		TableName: dbCfg.TableName,
 		Client:    dynamodbClient,
 	}, nil
 }

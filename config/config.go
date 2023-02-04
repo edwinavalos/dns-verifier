@@ -13,7 +13,7 @@ type LetsEncryptSettings struct {
 	KeyAuth            string `json:"key_auth"`
 }
 
-type AWSSettings struct {
+type CloudProviderSettings struct {
 	Region     string
 	BucketName string
 }
@@ -35,18 +35,18 @@ type DatabaseSettings struct {
 }
 
 type Config struct {
-	AWS        AWSSettings
-	App        AppSettings
-	LESettings LetsEncryptSettings
-	DB         DatabaseSettings
-	Env        string
-	Network    NetworkSettings
-	RootCtx    context.Context
+	CloudProvider CloudProviderSettings
+	App           AppSettings
+	LESettings    LetsEncryptSettings
+	DB            DatabaseSettings
+	Env           string
+	Network       NetworkSettings
+	RootCtx       context.Context
 }
 
 func (c *Config) ReadConfig() *Config {
-	c.AWS.Region = viper.GetString("aws.region")
-	c.AWS.BucketName = viper.GetString("aws.s3BucketName")
+	c.CloudProvider.Region = viper.GetString("cloud_provider.region")
+	c.CloudProvider.BucketName = viper.GetString("cloud_provider.s3BucketName")
 	c.App.VerificationTxtRecordName = viper.GetString("app.verificationTxtRecordName")
 	c.App.AlwaysRecreate = viper.GetBool("app.alwaysRecreate")
 	c.Network.OwnedHosts = viper.GetStringSlice("network.owned_hosts")
@@ -68,7 +68,7 @@ func (c *Config) ReadConfig() *Config {
 
 func NewConfig() *Config {
 	return &Config{
-		AWS: AWSSettings{
+		CloudProvider: CloudProviderSettings{
 			Region:     "us-west-2",
 			BucketName: "test-bucket",
 		},

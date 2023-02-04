@@ -1,6 +1,7 @@
 package s3_filestore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -20,34 +21,33 @@ type S3Store struct {
 	Client *s3.Client
 }
 
-func (store *S3Store) Initialize(cfg *config.Config) error {
-
+func NewS3Storage(cfg *config.CloudProviderSettings) (datastore.FileStore, error) {
 	// Check if we have the config we need
-	if cfg.AWS.BucketName == "" {
+	if cfg.BucketName == "" {
 		datastore.Log.Fatalf("did not have enough information to get or s3 bucket")
-		datastore.Log.Fatalf("bucketName: {%s}", cfg.AWS.BucketName)
-		return fmt.Errorf("missing aws configuration")
+		datastore.Log.Fatalf("bucketName: {%s}", cfg.BucketName)
+		return nil, fmt.Errorf("missing aws configuration")
 	}
 
-	awsConf, err := awsConfig.LoadDefaultConfig(cfg.RootCtx, awsConfig.WithRegion(cfg.AWS.Region))
+	awsConf, err := awsConfig.LoadDefaultConfig(context.TODO(), awsConfig.WithRegion(cfg.Region))
 	if err != nil {
 		datastore.Log.Fatalf("unable to load default aws appConfig")
-		return err
+		return nil, err
 	}
 	s3Client := s3.NewFromConfig(awsConf)
 
 	// Check if the bucket exists
 	_, err = s3Client.HeadBucket(context.TODO(), &s3.HeadBucketInput{
-		Bucket: aws.String(cfg.AWS.BucketName),
+		Bucket: aws.String(cfg.BucketName),
 	})
 	if err != nil {
 		var apiError smithy.APIError
 		if errors.As(err, &apiError) {
 			switch apiError.(type) {
 			case *types.NotFound:
-				return fmt.Errorf("bucket is not taken, but needs to be created")
+				return nil, fmt.Errorf("bucket is not taken, but needs to be created")
 			default:
-				return fmt.Errorf("can't determine if bucket exists")
+				return nil, fmt.Errorf("can't determine if bucket exists")
 			}
 		}
 	}
@@ -55,8 +55,11 @@ func (store *S3Store) Initialize(cfg *config.Config) error {
 	// Save the client to the store object because we know its a good client and the bucket existed, or was created
 	// with it
 	datastore.Log.Infof("was able to connect to bucket, and saving s3 client")
-	store.Client = s3.NewFromConfig(awsConf)
-	return nil
+
+	return &S3Store{
+		Bucket: cfg.BucketName,
+		Client: s3.NewFromConfig(awsConf),
+	}, nil
 }
 
 func (store *S3Store) SaveFile(sourcePath string, destinationPath string) error {
@@ -66,7 +69,7 @@ func (store *S3Store) SaveFile(sourcePath string, destinationPath string) error 
 	}
 	defer file.Close()
 	_, err = store.Client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket: aws.String(fmt.Sprintf("s3://%s", store.Bucket)),
+		Bucket: aws.String(fmt.Sprintf(store.Bucket)),
 		Key:    aws.String(destinationPath),
 		Body:   file,
 	})
@@ -77,13 +80,26 @@ func (store *S3Store) SaveFile(sourcePath string, destinationPath string) error 
 	return nil
 }
 
+func (store *S3Store) SaveBuf(buffer bytes.Buffer, destinationPath string) error {
+	_, err := store.Client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket: aws.String(fmt.Sprintf(store.Bucket)),
+		Key:    aws.String(destinationPath),
+		Body:   bytes.NewReader(buffer.Bytes()),
+	})
+	if err != nil {
+		return fmt.Errorf("ran into issue uploading buffer: %s", err)
+	}
+	datastore.Log.Infof("uploaded the buffer to s3://%s/%s", store.Bucket, destinationPath)
+	return nil
+}
+
 func (store *S3Store) GetFile(sourcePath string, destinationPath string) error {
 	result, err := store.Client.GetObject(context.TODO(), &s3.GetObjectInput{
-		Bucket: aws.String(fmt.Sprintf("s3://%s", store.Bucket)),
+		Bucket: aws.String(store.Bucket),
 		Key:    aws.String(sourcePath),
 	})
 	if err != nil {
-		return fmt.Errorf("unable to get object from bucket: %w", err)
+		return fmt.Errorf("unable to get object: s3://%s/%s from bucket: %w", store.Bucket, sourcePath, err)
 	}
 	defer result.Body.Close()
 	file, err := os.Create(destinationPath)

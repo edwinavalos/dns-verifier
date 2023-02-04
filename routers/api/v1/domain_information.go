@@ -2,18 +2,11 @@ package v1
 
 import (
 	"fmt"
-	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
-
-var l *logger.Logger
-
-func SetLogger(toSet *logger.Logger) {
-	l = toSet
-}
 
 type GenerateOwnershipKeyReq struct {
 	DomainName string `json:"domain_name"`
