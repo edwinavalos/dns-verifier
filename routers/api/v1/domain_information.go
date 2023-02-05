@@ -50,12 +50,25 @@ type DeleteDomainInformationResp struct {
 }
 
 func HandleGetDomainInformation(c *gin.Context) {
-	recordMap, err := domain_service.GetAllRecords()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ran into error getting all records: %e", err)})
+	var retRecordMap map[string]map[string]models.DomainInformation
+	userId := c.Query("userId")
+	if userId == "" {
+		retRecordMap, err := domain_service.GetAllRecords()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ran into error getting all records: %s", err.Error())})
+			return
+		}
+		c.JSON(http.StatusOK, retRecordMap)
 		return
 	}
-	c.JSON(http.StatusOK, recordMap)
+
+	retRecordMap, err := domain_service.GetUserDomains(userId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ran into error creating user recordmap: %s", err.Error())})
+		return
+	}
+
+	c.JSON(http.StatusOK, retRecordMap)
 	return
 }
 

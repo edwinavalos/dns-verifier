@@ -224,17 +224,17 @@ func newCSR(identifiers []acme.AuthzID) ([]byte, *ecdsa.PrivateKey) {
 	return b, k
 }
 
-func runDNS01(ctx context.Context, client *acme.Client, z *acme.Authorization, chal *acme.Challenge) (string, string, error) {
+func runDNS01(ctx context.Context, client *acme.Client, z *acme.Authorization, chal *acme.Challenge) (string, error) {
 	token, err := client.DNS01ChallengeRecord(chal.Token)
 	if err != nil {
-		return "", "", fmt.Errorf("DNS01ChallengeRecord: %v", err)
+		return "", fmt.Errorf("DNS01ChallengeRecord: %v", err)
 	}
 
 	//if _, err := client.Accept(ctx, chal); err != nil {
 	//	return "", "", fmt.Errorf("accept(%q): %v", chal.URI, err)
 	//}
 
-	return fmt.Sprintf("_acme-challenge.%s", z.Identifier.Value), token, nil
+	return token, nil
 }
 
 func completeDNS01(ctx context.Context, client *acme.Client, z *acme.Authorization, chal *acme.Challenge, order *acme.Order) error {
@@ -255,7 +255,20 @@ func completeDNS01(ctx context.Context, client *acme.Client, z *acme.Authorizati
 	return nil
 }
 
-func request(ctx context.Context, client *acme.Client, z *acme.Authorization) (string, string, error) {
+func request(ctx context.Context, client *acme.Client, z *acme.Authorization) (string, error) {
+	chal := getDnsChallenge(z)
+	if chal == nil {
+		return "", fmt.Errorf("challenge type %q wasn't offered for authz %s", challenge.DNS01, z.URI)
+	}
+
+	token, err := runDNS01(ctx, client, z, chal)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func getDnsChallenge(z *acme.Authorization) *acme.Challenge {
 	var chal *acme.Challenge
 	for i, c := range z.Challenges {
 		l.Infof("challenge %d: %+v", i, c)
@@ -264,15 +277,7 @@ func request(ctx context.Context, client *acme.Client, z *acme.Authorization) (s
 			chal = c
 		}
 	}
-	if chal == nil {
-		return "", "", fmt.Errorf("challenge type %q wasn't offered for authz %s", challenge.DNS01, z.URI)
-	}
-
-	zone, token, err := runDNS01(ctx, client, z, chal)
-	if err != nil {
-		return "", "", err
-	}
-	return zone, token, nil
+	return chal
 }
 
 func RequestCertificate(userId string, domain string, email string) (string, string, error) {
@@ -327,13 +332,20 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 			return "", "", fmt.Errorf("GetAuthorization(%q): %v", u, err)
 		}
 		l.Infof("Authorizations: %+v", z)
-		if z.Status != acme.StatusPending {
+		if z.Status != acme.StatusPending && z.Status != acme.StatusValid {
 			l.Infof("authz status is %q; skipping", z.Status)
 			continue
 		}
-		zone, token, err := request(context.TODO(), client, z)
+		zone := fmt.Sprintf("_acme-challenge.%s", domain)
+		if z.Status == acme.StatusPending {
+			_, err := request(context.TODO(), client, z)
+			if err != nil {
+				return "", "", fmt.Errorf("unable to request certificate: %w", err)
+			}
+		}
+		chal := getDnsChallenge(z)
 		domainInfo.LEVerification.VerificationZone = zone
-		domainInfo.LEVerification.VerificationKey = token
+		domainInfo.LEVerification.VerificationKey = chal.Token
 		domainInfo.OrderURL = u
 		domainInfo.CertURL = z.URI
 		err = dbStorage.PutDomainInfo(domainInfo)

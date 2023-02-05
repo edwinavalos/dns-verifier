@@ -61,6 +61,14 @@ func GetAllRecords() (map[string]map[string]models.DomainInformation, error) {
 	return retMap, nil
 }
 
+func GetUserDomains(userId string) (map[string]map[string]models.DomainInformation, error) {
+	domains, err := dbStorage.GetUserDomains(userId)
+	if err != nil {
+		return nil, fmt.Errorf("ran into issue getting user's domain from dbstorage: %w", err)
+	}
+	return map[string]map[string]models.DomainInformation{userId: domains}, nil
+}
+
 func PutDomain(userId string, domainName string) error {
 	return dbStorage.PutDomainInfo(models.DomainInformation{DomainName: domainName, UserId: userId})
 }

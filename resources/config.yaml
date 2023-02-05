@@ -1,7 +1,6 @@
-aws:
+cloud_provider:
   region: us-west-2
-  s3BucketName: mastodon-dns-verification
-  verificationFileName: domain_information.json
+  bucket_name: mastodon-dns-verification
 
 db:
   table_name: dns-verifier

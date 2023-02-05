@@ -9,7 +9,7 @@ import (
 func NewServer() *http.Server {
 	routes := routers.InitRouter()
 	return &http.Server{
-		Addr:         ":8080",
+		Addr:         ":8081",
 		Handler:      routes,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,

@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -22,10 +23,9 @@ func main() {
 	rand.Seed(time.Now().Unix())
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	rootCtx := context.Background()
-	rootLogger := logger.Logger{
-		Logger: zerolog.Logger{},
+	var rootLogger = logger.Logger{
+		Logger: zerolog.New(os.Stdout),
 	}
-
 	setLoggers(rootLogger)
 
 	viper.SetConfigName("config")
@@ -55,11 +55,7 @@ func main() {
 
 	setDBStorage(dbStorage)
 
-	fileStore, err := s3_filestore.NewS3Storage()
-	if err != nil {
-		panic(err)
-	}
-	err = fileStore.Initialize(&appConfig.CloudProvider)
+	fileStore, err := s3_filestore.NewS3Storage(&appConfig.CloudProvider)
 	if err != nil {
 		panic(err)
 	}

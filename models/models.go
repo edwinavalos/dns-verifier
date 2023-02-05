@@ -17,9 +17,11 @@ type Delegations struct {
 	ARecords            []string  `dynamodbav:"a_records"`
 	ARecordWarningStamp time.Time `dynamodbav:"a_record_warning_stamp"`
 	ARecordExpireStamp  time.Time `dynamodbav:"a_record_expire_stamp"`
+	ARecordInPlace      bool
 	CNames              []string  `dynamodbav:"c_names"`
 	CNameWarningStamp   time.Time `dynamodbav:"c_name_warning_stamp"`
 	CNameExpireStamp    time.Time `dynamodbav:"c_name_expire_stamp"`
+	CNameInPlace        bool
 }
 
 type Verification struct {

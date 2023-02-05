@@ -46,7 +46,7 @@ type Config struct {
 
 func (c *Config) ReadConfig() *Config {
 	c.CloudProvider.Region = viper.GetString("cloud_provider.region")
-	c.CloudProvider.BucketName = viper.GetString("cloud_provider.s3BucketName")
+	c.CloudProvider.BucketName = viper.GetString("cloud_provider.bucket_name")
 	c.App.VerificationTxtRecordName = viper.GetString("app.verificationTxtRecordName")
 	c.App.AlwaysRecreate = viper.GetBool("app.alwaysRecreate")
 	c.Network.OwnedHosts = viper.GetStringSlice("network.owned_hosts")
