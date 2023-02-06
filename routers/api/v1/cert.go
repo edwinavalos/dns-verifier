@@ -73,7 +73,7 @@ func HandleCompleteCertificateRequest(c *gin.Context) {
 		return
 	}
 
-	_, err = cert_service.CompleteCertificateRequest(userId, domain, "")
+	err = cert_service.CompleteCertificateRequest(userId, domain, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, CompleteCertificateRequestResp{
 			Error: fmt.Sprintf("domain: %s, unable to complete certificate request: %s", domain, err),

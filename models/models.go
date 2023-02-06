@@ -32,15 +32,22 @@ type Verification struct {
 	VerificationExpireStamp  time.Time `dynamodbav:"verification_expire_stamp"`
 }
 
+type LEInfo struct {
+	AuthzURL     string `dynamodbav:"authz_url"`
+	CertURL      string `dynamodbav:"cert_url"`
+	ChallengeURL string `dynamodbav:"challenge_url"`
+	CSRCertURL   string `dynamodbav:"csr_cert_url"`
+	OrderURL     string `dynamodbav:"order_url"`
+	FinalizeURL  string `dynamodbav:"finalize_url"`
+}
+
 type DomainInformation struct {
 	DomainName     string       `dynamodbav:"domain_name"`
 	Verification   Verification `dynamodbav:"verification"`
 	LEVerification Verification `dynamodbav:"le_verification"`
 	Delegations    Delegations  `dynamodbav:"delegations"`
 	UserId         string       `dynamodbav:"user_id"`
-	CertURL        string       `dynamodbav:"cert_url"`
-	OrderURL       string       `dynamodbav:"order_url"`
-	CSRCertURL     string       `dynamodbav:"csr_cert_url"`
+	LEInfo         LEInfo       `dynamodbav:"le_info"`
 }
 
 func (domainInfo *DomainInformation) GetKey() (map[string]types.AttributeValue, error) {

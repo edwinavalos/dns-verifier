@@ -107,10 +107,16 @@ func getRequestUserCert() (*ecdsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func CompleteCertificateRequest(userId string, domain string, email string) ([][]byte, error) {
+func CompleteCertificateRequest(userId string, domain string, email string) error {
+	// Retrieve our domain info from the database
+	domainInfo, err := dbStorage.GetDomainByUser(userId, domain)
+	if err != nil {
+		return fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
+	}
+
 	privateKey, err := getRequestUserCert()
 	if err != nil {
-		return nil, fmt.Errorf("unable to requestUserCert(): %w", err)
+		return fmt.Errorf("unable to requestUserCert(): %w", err)
 	}
 
 	// Create our client which will interact with the acme api
@@ -119,55 +125,77 @@ func CompleteCertificateRequest(userId string, domain string, email string) ([][
 		DirectoryURL: cfg.LESettings.CADirURL,
 	}
 
-	// Retrieve our domain info from the database
-	domainInfo, err := dbStorage.GetDomainByUser(userId, domain)
-	if err != nil {
-		return nil, fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
+	if domainInfo.LEVerification.Verified == true && domainInfo.LEInfo.CertURL != "" {
+		certs, err := client.FetchCert(context.TODO(), domainInfo.LEInfo.CertURL, true)
+		if err != nil {
+			return err
+		}
+
+		err2 := WriteToStorage(privateKey, domain, certs)
+		if err2 != nil {
+			return err2
+		}
+		return nil
+	}
+
+	if domainInfo.LEInfo.OrderURL == "" {
+		return fmt.Errorf("missing order_url")
 	}
 
 	identifiers := acme.DomainIDs(domain)
-	authOrder, err := client.AuthorizeOrder(context.TODO(), identifiers)
+	authOrder, err := client.GetOrder(context.TODO(), domainInfo.LEInfo.OrderURL)
+	if err != nil || authOrder.Status == acme.StatusInvalid {
+		return fmt.Errorf("AuthorizeOrder: %v", err)
+	}
+	// we set this because get order doesn't populate the URI value
+	authOrder.URI = domainInfo.LEInfo.OrderURL
+
+	if domainInfo.LEInfo.AuthzURL == "" {
+		return fmt.Errorf("missing authz_url")
+	}
+	authz, err := client.GetAuthorization(context.TODO(), domainInfo.LEInfo.AuthzURL)
 	if err != nil {
-		return nil, fmt.Errorf("AuthorizeOrder: %v", err)
+		return err
 	}
 
-	authz, err := client.GetAuthorization(context.TODO(), domainInfo.OrderURL)
+	if domainInfo.LEInfo.ChallengeURL == "" {
+		return fmt.Errorf("missing challenge_url")
+	}
+	chal, err := client.GetChallenge(context.TODO(), domainInfo.LEInfo.ChallengeURL)
 	if err != nil {
-		return nil, err
-	}
-
-	var chal *acme.Challenge
-	for i, c := range authz.Challenges {
-		l.Infof("challenge %d: %+v", i, c)
-		if c.Type == challenge.DNS01.String() {
-			l.Infof("picked %s for authz %s", c.URI, authz.URI)
-			chal = c
-		}
-	}
-	if chal == nil {
-		return nil, fmt.Errorf("challenge type %q wasn't offered for authz %s", challenge.DNS01, authz.URI)
+		return err
 	}
 
 	err = completeDNS01(context.TODO(), client, authz, chal, authOrder)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	csr, privateKey := newCSR(identifiers)
 	ders, curl, err := client.CreateOrderCert(context.TODO(), authOrder.FinalizeURL, csr, true)
 	if err != nil {
-		return nil, fmt.Errorf("CreateOrderCert: %v", err)
+		return fmt.Errorf("CreateOrderCert: %v", err)
 	}
-	domainInfo.CertURL = curl
+	domainInfo.LEInfo.CertURL = curl
+	domainInfo.LEVerification.Verified = true
 	err = dbStorage.PutDomainInfo(domainInfo)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	l.Infof("cert URL: %s", curl)
 
+	err2 := WriteToStorage(privateKey, domain, ders)
+	if err2 != nil {
+		return err2
+	}
+
+	return nil
+}
+
+func WriteToStorage(privateKey *ecdsa.PrivateKey, domain string, ders [][]byte) error {
 	keyBytes, err := x509.MarshalECPrivateKey(privateKey)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Encode the private key into PEM format
@@ -180,12 +208,12 @@ func CompleteCertificateRequest(userId string, domain string, email string) ([][
 	var privBuf bytes.Buffer
 	err = pem.Encode(&privBuf, privateKeyPEM)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode PEM block: %v\n", err)
+		return fmt.Errorf("failed to encode PEM block: %v\n", err)
 	}
 
 	err = fileStorage.SaveBuf(privBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.key", domain))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var mergedDers []byte
@@ -195,10 +223,9 @@ func CompleteCertificateRequest(userId string, domain string, email string) ([][
 	secondBuf := bytes.NewBuffer(mergedDers)
 	err = fileStorage.SaveBuf(*secondBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.crt", domain))
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	return ders, nil
+	return nil
 }
 
 func newCSR(identifiers []acme.AuthzID) ([]byte, *ecdsa.PrivateKey) {
@@ -224,25 +251,24 @@ func newCSR(identifiers []acme.AuthzID) ([]byte, *ecdsa.PrivateKey) {
 	return b, k
 }
 
-func runDNS01(ctx context.Context, client *acme.Client, z *acme.Authorization, chal *acme.Challenge) (string, error) {
+func runDNS01(ctx context.Context, client *acme.Client, chal *acme.Challenge) (string, error) {
 	token, err := client.DNS01ChallengeRecord(chal.Token)
 	if err != nil {
 		return "", fmt.Errorf("DNS01ChallengeRecord: %v", err)
 	}
 
-	//if _, err := client.Accept(ctx, chal); err != nil {
-	//	return "", "", fmt.Errorf("accept(%q): %v", chal.URI, err)
-	//}
-
 	return token, nil
 }
 
 func completeDNS01(ctx context.Context, client *acme.Client, z *acme.Authorization, chal *acme.Challenge, order *acme.Order) error {
-	if _, err := client.Accept(ctx, chal); err != nil {
+
+	newChal, err := client.Accept(ctx, chal)
+	if err != nil {
 		return fmt.Errorf("accept(%q): %v", chal.URI, err)
 	}
+	l.Infof("%+v", newChal)
 
-	_, err := client.WaitAuthorization(context.TODO(), z.URI)
+	_, err = client.WaitAuthorization(context.TODO(), z.URI)
 	if err != nil {
 		return err
 	}
@@ -255,17 +281,17 @@ func completeDNS01(ctx context.Context, client *acme.Client, z *acme.Authorizati
 	return nil
 }
 
-func request(ctx context.Context, client *acme.Client, z *acme.Authorization) (string, error) {
+func request(ctx context.Context, client *acme.Client, z *acme.Authorization) (string, *acme.Challenge, error) {
 	chal := getDnsChallenge(z)
 	if chal == nil {
-		return "", fmt.Errorf("challenge type %q wasn't offered for authz %s", challenge.DNS01, z.URI)
+		return "", nil, fmt.Errorf("challenge type %q wasn't offered for authz %s", challenge.DNS01, z.URI)
 	}
 
-	token, err := runDNS01(ctx, client, z, chal)
+	token, err := runDNS01(ctx, client, chal)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return token, nil
+	return token, chal, nil
 }
 
 func getDnsChallenge(z *acme.Authorization) *acme.Challenge {
@@ -302,7 +328,7 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 
 	// Log in and get our account information
 	//var account *acme.Account
-	if domainInfo.CertURL != "" {
+	if domainInfo.LEInfo.CertURL != "" {
 		// the url parameter is legacy and not used
 		_, err = client.GetReg(context.TODO(), "")
 		if err != nil {
@@ -320,9 +346,30 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 
 	// We create an order for our domain name, this is key to authorizing everything
 	// this kicks off the process
-	authOrder, err := client.AuthorizeOrder(context.TODO(), identifiers)
-	if err != nil {
-		return "", "", err
+	var authOrder *acme.Order
+	if domainInfo.LEInfo.OrderURL == "" {
+		authOrder, err = client.AuthorizeOrder(context.TODO(), identifiers)
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		authOrder, err = client.GetOrder(context.TODO(), domainInfo.LEInfo.OrderURL)
+		if err != nil {
+			return "", "", err
+		}
+		// We need to set this because it doesn't get populated by GetOrder
+		if authOrder.Status == acme.StatusInvalid {
+			authOrder, err = client.AuthorizeOrder(context.TODO(), identifiers)
+			if err != nil {
+				return "", "", err
+			}
+		}
+		if authOrder.URI == "" {
+			authOrder.URI = domainInfo.LEInfo.OrderURL
+		}
+	}
+	if authOrder == nil {
+		return "", "", fmt.Errorf("unable to find auth order in db or unable to authorize new order")
 	}
 
 	var zurls []string
@@ -332,22 +379,31 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 			return "", "", fmt.Errorf("GetAuthorization(%q): %v", u, err)
 		}
 		l.Infof("Authorizations: %+v", z)
-		if z.Status != acme.StatusPending && z.Status != acme.StatusValid {
+		if z.Status != acme.StatusPending && z.Status != acme.StatusInvalid {
 			l.Infof("authz status is %q; skipping", z.Status)
 			continue
 		}
+		var token string
+		var chal *acme.Challenge
 		zone := fmt.Sprintf("_acme-challenge.%s", domain)
 		if z.Status == acme.StatusPending {
-			_, err := request(context.TODO(), client, z)
+			token, chal, err = request(context.TODO(), client, z)
 			if err != nil {
 				return "", "", fmt.Errorf("unable to request certificate: %w", err)
 			}
 		}
-		chal := getDnsChallenge(z)
+		if chal == nil {
+			return "", "", fmt.Errorf("unable to find dns challenge")
+		}
+		if token == "" {
+			token = chal.Token
+		}
 		domainInfo.LEVerification.VerificationZone = zone
-		domainInfo.LEVerification.VerificationKey = chal.Token
-		domainInfo.OrderURL = u
-		domainInfo.CertURL = z.URI
+		domainInfo.LEVerification.VerificationKey = token
+		domainInfo.LEInfo.OrderURL = authOrder.URI
+		domainInfo.LEInfo.ChallengeURL = chal.URI
+		domainInfo.LEInfo.AuthzURL = z.URI
+		domainInfo.LEInfo.FinalizeURL = authOrder.FinalizeURL
 		err = dbStorage.PutDomainInfo(domainInfo)
 		if err != nil {
 			return "", "", err

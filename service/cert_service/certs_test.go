@@ -141,7 +141,7 @@ func Test_completeCertificateRequest(t *testing.T) {
 
 			time.Sleep(300 * time.Second)
 
-			ders, err := CompleteCertificateRequest(tt.args.userId, tt.args.domain, tt.args.email)
+			err := CompleteCertificateRequest(tt.args.userId, tt.args.domain, tt.args.email)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CompleteCertificateRequest() error = %v, wantErr %v", err, tt.wantErr)
 				return
