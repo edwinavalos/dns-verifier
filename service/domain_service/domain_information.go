@@ -9,7 +9,6 @@ import (
 	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/edwinavalos/dns-verifier/utils"
-	"github.com/rs/zerolog/log"
 	"net"
 )
 
@@ -92,27 +91,20 @@ func GenerateOwnershipKey(userId string, domainName string) (string, error) {
 	return di.Verification.VerificationKey, nil
 }
 
-// VerifyOwnership checks the TXT record for our verification string we give people
-func VerifyOwnership(ctx context.Context, userId string, domainName string) (bool, error) {
-
-	di, err := dbStorage.GetDomainByUser(userId, domainName)
+func VerifyTXTRecord(ctx context.Context, verificationZone string, verificationKey string) (bool, error) {
+	txtRecords, err := net.LookupTXT(verificationZone)
 	if err != nil {
 		return false, err
 	}
 
-	txtRecords, err := net.LookupTXT(di.DomainName)
-	if err != nil {
-		return false, err
-	}
-
-	log.Debug().Msgf("txtRecords: %+v", txtRecords)
-	log.Debug().Msgf("trying to find: %s;%s;%s", cfg.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey)
+	l.Infof("txtRecords: %+v", txtRecords)
+	l.Infof("trying to find: %s", verificationKey)
 	for _, txt := range txtRecords {
-		if txt == fmt.Sprintf("%s;%s;%s", cfg.App.VerificationTxtRecordName, di.DomainName, di.Verification.VerificationKey) {
-			log.Info().Msgf("found key: %s", txt)
+		if txt == verificationKey {
+			l.Infof("found key: %s", txt)
 			return true, nil
 		}
-		log.Debug().Msgf("record: %s, on %s", txt, di.DomainName)
+		l.Infof("record: %s, on %s", txt, verificationZone)
 	}
 
 	return false, nil

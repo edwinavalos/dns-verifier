@@ -39,9 +39,19 @@ func HandleRequestCertificate(c *gin.Context) {
 		return
 	}
 
-	recordName, recordValue, err := cert_service.RequestCertificate(newCertReq.UserId, newCertReq.Domain, cfg.LESettings.AdminEmail)
+	recordName, recordValue, alreadyValid, err := cert_service.RequestCertificate(newCertReq.UserId, newCertReq.Domain, cfg.LESettings.AdminEmail)
 	if err != nil {
-		log.Errorf("unable to request new certificate from Let's Encrypt: %s", err)
+		if alreadyValid {
+			c.JSON(http.StatusAccepted, RequestCertificateResp{
+				Domain:      newCertReq.Domain,
+				RecordName:  "",
+				RecordValue: "",
+				Error:       err.Error(),
+			})
+			return
+		}
+
+		log.Errorf("unable to create new certificate request from Let's Encrypt: %s", err)
 		c.JSON(http.StatusInternalServerError, RequestCertificateResp{
 			Domain: newCertReq.Domain,
 			Error:  fmt.Sprintf("unable to request new certificate from Let's Encrypt: %s", err),
@@ -75,6 +85,7 @@ func HandleCompleteCertificateRequest(c *gin.Context) {
 
 	err = cert_service.CompleteCertificateRequest(userId, domain, "")
 	if err != nil {
+		log.Errorf("ran into issue complete certificate request: %s", err)
 		c.JSON(http.StatusInternalServerError, CompleteCertificateRequestResp{
 			Error: fmt.Sprintf("domain: %s, unable to complete certificate request: %s", domain, err),
 		})

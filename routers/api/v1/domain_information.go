@@ -115,7 +115,7 @@ func HandleVerifyOwnership(c *gin.Context) {
 	userId := newVerifyOwnershipReq.UserId
 	di := models.DomainInformation{DomainName: domainName, UserId: userId}
 
-	result, err := domain_service.VerifyOwnership(c, userId, domainName)
+	result, err := domain_service.VerifyTXTRecord(c, di.Verification.VerificationZone, di.Verification.VerificationKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("unable to verify domain: %s", err)})
 		return
