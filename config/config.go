@@ -20,6 +20,7 @@ type appConfig struct {
 	DBRegion                  string   `json:"db_region"`
 	DBIsLocal                 bool     `json:"db_is_local"`
 	Env                       string   `json:"env"`
+	StripeKey                 string   `json:"stripe_key"`
 }
 
 func (c *appConfig) ReadConfig() {
@@ -40,6 +41,8 @@ func (c *appConfig) ReadConfig() {
 	c.DBTableName = viper.GetString("db.table_name")
 	c.DBRegion = viper.GetString("db.region")
 	c.DBIsLocal = viper.GetBool("db.is_local")
+
+	c.StripeKey = viper.GetString("stripe.key")
 
 	return
 }

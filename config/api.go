@@ -59,3 +59,7 @@ func (c *Config) DBIsLocal() bool {
 func (c *Config) Env() string {
 	return c.appConfig.Env
 }
+
+func (c *Config) StripeKey() string {
+	return c.appConfig.StripeKey
+}
