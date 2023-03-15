@@ -21,6 +21,13 @@ type appConfig struct {
 	DBIsLocal                 bool     `json:"db_is_local"`
 	Env                       string   `json:"env"`
 	StripeKey                 string   `json:"stripe_key"`
+	EncKey                    string   `json:"enc_key"`
+	CookieSecret              string   `json:"cookie_secret"`
+	OauthClientID             string   `json:"oauth_client_id"`
+	OauthClientSecret         string   `json:"oauth_client_secret"`
+	OauthRedirectURL          string   `json:"oauth_redirect_url"`
+	OauthIssuerURL            string   `json:"oauth_issuer_url"`
+	OauthScopes               []string `json:"oauth_scopes"`
 }
 
 func (c *appConfig) ReadConfig() {
