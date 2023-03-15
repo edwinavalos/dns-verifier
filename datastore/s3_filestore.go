@@ -1,4 +1,4 @@
-package s3_filestore
+package datastore
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
-	"github.com/edwinavalos/dns-verifier/config"
-	"github.com/edwinavalos/dns-verifier/datastore"
 	"io"
 	"os"
 )
@@ -21,24 +19,24 @@ type S3Store struct {
 	Client *s3.Client
 }
 
-func NewS3Storage(cfg *config.CloudProviderSettings) (datastore.FileStore, error) {
+func NewS3Storage(cfg cfg) (FileStore, error) {
 	// Check if we have the config we need
-	if cfg.BucketName == "" {
-		datastore.Log.Fatalf("did not have enough information to get or s3 bucket")
-		datastore.Log.Fatalf("bucketName: {%s}", cfg.BucketName)
+	if cfg.CloudProviderBucketName() == "" {
+		Log.Fatalf("did not have enough information to get or s3 bucket")
+		Log.Fatalf("bucketName: {%s}", cfg.CloudProviderBucketName())
 		return nil, fmt.Errorf("missing aws configuration")
 	}
 
-	awsConf, err := awsConfig.LoadDefaultConfig(context.TODO(), awsConfig.WithRegion(cfg.Region))
+	awsConf, err := awsConfig.LoadDefaultConfig(context.TODO(), awsConfig.WithRegion(cfg.CloudProviderRegion()))
 	if err != nil {
-		datastore.Log.Fatalf("unable to load default aws appConfig")
+		Log.Fatalf("unable to load default aws appConfig")
 		return nil, err
 	}
 	s3Client := s3.NewFromConfig(awsConf)
 
 	// Check if the bucket exists
 	_, err = s3Client.HeadBucket(context.TODO(), &s3.HeadBucketInput{
-		Bucket: aws.String(cfg.BucketName),
+		Bucket: aws.String(cfg.CloudProviderBucketName()),
 	})
 	if err != nil {
 		var apiError smithy.APIError
@@ -54,10 +52,10 @@ func NewS3Storage(cfg *config.CloudProviderSettings) (datastore.FileStore, error
 
 	// Save the client to the store object because we know its a good client and the bucket existed, or was created
 	// with it
-	datastore.Log.Infof("was able to connect to bucket, and saving s3 client")
+	Log.Infof("was able to connect to bucket, and saving s3 client")
 
 	return &S3Store{
-		Bucket: cfg.BucketName,
+		Bucket: cfg.CloudProviderBucketName(),
 		Client: s3.NewFromConfig(awsConf),
 	}, nil
 }
@@ -76,7 +74,7 @@ func (store *S3Store) SaveFile(sourcePath string, destinationPath string) error 
 	if err != nil {
 		return fmt.Errorf("ran into issue uploading file: %w", err)
 	}
-	datastore.Log.Infof("uploaded: %s to s3://%s/%s", sourcePath, store.Bucket, destinationPath)
+	Log.Infof("uploaded: %s to s3://%s/%s", sourcePath, store.Bucket, destinationPath)
 	return nil
 }
 
@@ -89,7 +87,7 @@ func (store *S3Store) SaveBuf(buffer bytes.Buffer, destinationPath string) error
 	if err != nil {
 		return fmt.Errorf("ran into issue uploading buffer: %s", err)
 	}
-	datastore.Log.Infof("uploaded the buffer to s3://%s/%s", store.Bucket, destinationPath)
+	Log.Infof("uploaded the buffer to s3://%s/%s", store.Bucket, destinationPath)
 	return nil
 }
 

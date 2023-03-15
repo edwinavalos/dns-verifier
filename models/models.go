@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-var cfg *config.Config
+var cfg *config.config
 
-func SetConfig(toSet *config.Config) {
+func SetConfig(toSet *config.config) {
 	cfg = toSet
 }
 
@@ -48,6 +48,7 @@ type DomainInformation struct {
 	Delegations    Delegations  `dynamodbav:"delegations"`
 	UserId         string       `dynamodbav:"user_id"`
 	LEInfo         LEInfo       `dynamodbav:"le_info"`
+	SubscriptionId Verification `dynamodbav:"subscription_id"`
 }
 
 func (domainInfo *DomainInformation) GetKey() (map[string]types.AttributeValue, error) {

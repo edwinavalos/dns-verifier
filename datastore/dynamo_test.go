@@ -1,8 +1,7 @@
-package dynamo
+package datastore
 
 import (
 	"github.com/edwinavalos/dns-verifier/config"
-	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/google/uuid"
@@ -11,7 +10,7 @@ import (
 	"time"
 )
 
-func resetStorage(storage datastore.Datastore) error {
+func resetStorage(storage Datastore) error {
 	err := storage.DropTable()
 	if err != nil {
 		return err
@@ -21,21 +20,21 @@ func resetStorage(storage datastore.Datastore) error {
 }
 
 func TestLocalDynamoStorage(t *testing.T) {
-	cfg := config.Config{
+	cfg := config.config{
 		DB: config.DatabaseSettings{
 			TableName: "dns-verifier",
 			Region:    "us-east-1",
 			IsLocal:   true,
 		},
 	}
-	datastore.Log = &logger.Logger{
+	Log = &logger.Logger{
 		Logger: zerolog.Logger{},
 	}
 
-	datastore.Config = &cfg
+	Config = &cfg
 	tests := []struct {
 		name    string
-		want    datastore.Datastore
+		want    Datastore
 		wantErr bool
 	}{
 		{

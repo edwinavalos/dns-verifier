@@ -12,7 +12,7 @@ import (
 	"net"
 )
 
-var cfg *config.Config
+var cfg *config.config
 var l *logger.Logger
 var dbStorage datastore.Datastore
 
@@ -20,7 +20,7 @@ func SetDBStorage(toSet datastore.Datastore) {
 	dbStorage = toSet
 }
 
-func SetConfig(conf *config.Config) {
+func SetConfig(conf *config.config) {
 	cfg = conf
 }
 

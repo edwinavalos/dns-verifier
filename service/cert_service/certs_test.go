@@ -4,7 +4,6 @@ import (
 	"crypto/x509"
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/datastore"
-	"github.com/edwinavalos/dns-verifier/datastore/dynamo"
 	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/edwinavalos/dns-verifier/models"
 	"github.com/go-acme/lego/v4/certificate"
@@ -16,7 +15,7 @@ import (
 )
 
 func Test_requestCertificate(t *testing.T) {
-	testConfig := config.Config{}
+	testConfig := config.config{}
 	testConfig.LESettings.PrivateKeyLocation = "C:\\mastodon\\private-key.pem"
 	testConfig.LESettings.CADirURL = lego.LEDirectoryStaging
 	testConfig.LESettings.KeyAuth = "asufficientlylongenoughstringwithenoughentropy"
@@ -31,7 +30,7 @@ func Test_requestCertificate(t *testing.T) {
 	datastore.SetLogger(&log)
 	SetLogger(&log)
 
-	dbStorage, err := dynamo.NewStorage(&testConfig)
+	dbStorage, err := datastore.NewStorage(&testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +71,7 @@ func Test_requestCertificate(t *testing.T) {
 }
 
 func Test_completeCertificateRequest(t *testing.T) {
-	testConfig := config.Config{}
+	testConfig := config.config{}
 	testConfig.LESettings = config.LetsEncryptSettings{
 		AdminEmail:         "admin@amoslabs.cloud",
 		PrivateKeyLocation: "C:\\mastodon\\private-key.pem",
@@ -90,7 +89,7 @@ func Test_completeCertificateRequest(t *testing.T) {
 	SetLogger(&log)
 	datastore.SetLogger(&log)
 
-	dbStorage, err := dynamo.NewStorage(&testConfig)
+	dbStorage, err := datastore.NewStorage(&testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"github.com/edwinavalos/dns-verifier/config"
 	"github.com/edwinavalos/dns-verifier/datastore"
-	"github.com/edwinavalos/dns-verifier/datastore/dynamo"
-	"github.com/edwinavalos/dns-verifier/datastore/s3_filestore"
 	"github.com/edwinavalos/dns-verifier/logger"
 	v1 "github.com/edwinavalos/dns-verifier/routers/api/v1"
 	"github.com/edwinavalos/dns-verifier/server"
@@ -43,7 +41,7 @@ func main() {
 
 	setConfigs(appConfig)
 
-	dbStorage, err := dynamo.NewStorage(appConfig.DB)
+	dbStorage, err := datastore.NewStorage(appConfig.DB)
 	if err != nil {
 		panic(err)
 	}
@@ -55,7 +53,7 @@ func main() {
 
 	setDBStorage(dbStorage)
 
-	fileStore, err := s3_filestore.NewS3Storage(&appConfig.CloudProvider)
+	fileStore, err := datastore.NewS3Storage(&appConfig.CloudProvider)
 	if err != nil {
 		panic(err)
 	}
@@ -76,7 +74,7 @@ func setDBStorage(storage datastore.Datastore) {
 	cert_service.SetDBStorage(storage)
 }
 
-func setConfigs(appConfig *config.Config) {
+func setConfigs(appConfig *config.config) {
 	domain_service.SetConfig(appConfig)
 	v1.SetConfig(appConfig)
 	cert_service.SetConfig(appConfig)

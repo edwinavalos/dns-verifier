@@ -1,4 +1,4 @@
-package s3_filestore
+package datastore
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"github.com/edwinavalos/dns-verifier/config"
-	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/logger"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -16,9 +15,9 @@ import (
 )
 
 func TestS3Store_Initialize(t *testing.T) {
-	datastore.SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
+	SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
 	type args struct {
-		cfg *config.Config
+		cfg *config.config
 	}
 	tests := []struct {
 		name    string
@@ -28,7 +27,7 @@ func TestS3Store_Initialize(t *testing.T) {
 		{
 			name: "Can initialize a bucket that exists",
 			args: args{
-				cfg: &config.Config{CloudProvider: config.CloudProviderSettings{
+				cfg: &config.config{CloudProvider: config.CloudProviderSettings{
 					Region:     "us-west-2",
 					BucketName: "dns-verifier-test-bucket",
 				}},
@@ -38,7 +37,7 @@ func TestS3Store_Initialize(t *testing.T) {
 		{
 			name: "Can't initialize a bucket that doesn't exist",
 			args: args{
-				cfg: &config.Config{
+				cfg: &config.config{
 					CloudProvider: config.CloudProviderSettings{
 						Region:     "us-west-2",
 						BucketName: "this-bucket-does-not-exist-freals",
@@ -110,15 +109,15 @@ func TestS3Store_GetFile(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			datastore.Config = &config.Config{
+			Config = &config.config{
 				CloudProvider: config.CloudProviderSettings{
 					Region:     "us-west-2",
 					BucketName: tt.args.bucketName,
 				},
 			}
-			datastore.SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
+			SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
 
-			store, err := NewS3Storage(&datastore.Config.CloudProvider)
+			store, err := NewS3Storage(&Config.CloudProvider)
 			if err != nil && tt.wantErr {
 				t.Logf("NewS3Storage() error = %+v, wantErr %+v", err, tt.wantErr)
 				return
@@ -181,15 +180,15 @@ func TestS3Store_SaveFile(t *testing.T) {
 			}
 			defer os.Remove(myfile.Name())
 
-			datastore.Config = &config.Config{
+			Config = &config.config{
 				CloudProvider: config.CloudProviderSettings{
 					Region:     "us-west-2",
 					BucketName: tt.args.bucketName,
 				},
 			}
-			datastore.SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
+			SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
 
-			store, err := NewS3Storage(&datastore.Config.CloudProvider)
+			store, err := NewS3Storage(&Config.CloudProvider)
 			if err != nil {
 				t.Errorf("NewS3Storage() error = %+v, wantErr %+v", err, tt.wantErr)
 			}
@@ -224,13 +223,13 @@ func TestS3Store_SaveBuf(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			datastore.Config = &config.Config{
+			Config = &config.config{
 				CloudProvider: config.CloudProviderSettings{
 					Region:     "us-west-2",
 					BucketName: tt.args.bucketName,
 				},
 			}
-			datastore.SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
+			SetLogger(&logger.Logger{Logger: zerolog.Logger{}})
 			certificatePEM := &pem.Block{
 				Type:  "CERTIFICATE",
 				Bytes: []byte("example pem data"),
@@ -243,7 +242,7 @@ func TestS3Store_SaveBuf(t *testing.T) {
 			if err != nil {
 				t.Errorf("failed to encode PEM block: %v\n", err)
 			}
-			store, err := NewS3Storage(&datastore.Config.CloudProvider)
+			store, err := NewS3Storage(&Config.CloudProvider)
 			if err != nil {
 				t.Errorf("NewS3Storage() error = %+v, wantErr %+v", err, tt.wantErr)
 			}

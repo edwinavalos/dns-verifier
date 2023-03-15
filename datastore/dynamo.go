@@ -1,4 +1,4 @@
-package dynamo
+package datastore
 
 import (
 	"context"
@@ -11,8 +11,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/edwinavalos/dns-verifier/config"
-	"github.com/edwinavalos/dns-verifier/datastore"
 	"github.com/edwinavalos/dns-verifier/models"
 	"time"
 )
@@ -22,10 +20,10 @@ type Storage struct {
 	Client    *dynamodb.Client
 }
 
-func NewStorage(dbCfg config.DatabaseSettings) (datastore.Datastore, error) {
+func NewStorage(dbCfg cfg) (Datastore, error) {
 	var conf aws.Config
 	var err error
-	if dbCfg.IsLocal {
+	if dbCfg.DBIsLocal() {
 		conf, err = aws_config.LoadDefaultConfig(context.TODO(),
 			aws_config.WithRegion("us-east-1"),
 			aws_config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
@@ -54,7 +52,7 @@ func NewStorage(dbCfg config.DatabaseSettings) (datastore.Datastore, error) {
 
 	dynamodbClient := dynamodb.NewFromConfig(conf)
 	return &Storage{
-		TableName: dbCfg.TableName,
+		TableName: dbCfg.DBTableName(),
 		Client:    dynamodbClient,
 	}, nil
 }
@@ -78,10 +76,10 @@ func (d *Storage) tableExists() (bool, error) {
 	if err != nil {
 		var notFoundEx *types.ResourceNotFoundException
 		if errors.As(err, &notFoundEx) {
-			datastore.Log.Infof("Table %v does not exist", d.TableName)
+			Log.Infof("Table %v does not exist", d.TableName)
 			err = nil
 		} else {
-			datastore.Log.Infof("Couldn't determine existence of table %v %v", d.TableName, err)
+			Log.Infof("Couldn't determine existence of table %v %v", d.TableName, err)
 		}
 		exists = false
 	}
@@ -91,7 +89,7 @@ func (d *Storage) tableExists() (bool, error) {
 func (d *Storage) Initialize() error {
 	exists, err := d.tableExists()
 	if exists {
-		datastore.Log.Infof("table: %s already exists, not creating", d.TableName)
+		Log.Infof("table: %s already exists, not creating", d.TableName)
 		return nil
 	}
 	_, err = d.Client.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
@@ -200,7 +198,7 @@ func (d *Storage) PutDomainInfo(info models.DomainInformation) error {
 		TableName: aws.String(d.TableName), Item: item,
 	})
 	if err != nil {
-		datastore.Log.Printf("Couldn't add item to table. Here's why: %v", err)
+		Log.Printf("Couldn't add item to table. Here's why: %v", err)
 	}
 	return err
 }

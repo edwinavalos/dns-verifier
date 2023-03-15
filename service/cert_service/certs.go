@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-var cfg *config.Config
+var cfg *config.config
 var l *logger.Logger
 var externalIP net.IP
 var dbStorage datastore.Datastore
@@ -43,7 +43,7 @@ func SetFileStorage(toSet datastore.FileStore) {
 	fileStorage = toSet
 }
 
-func SetConfig(conf *config.Config) {
+func SetConfig(conf *config.config) {
 	cfg = conf
 }
 
