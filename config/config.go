@@ -22,6 +22,7 @@ type appConfig struct {
 	Env                       string   `json:"env"`
 	StripeKey                 string   `json:"stripe_key"`
 	EncKey                    string   `json:"enc_key"`
+	SessionName               string   `json:"session_name"`
 	CookieSecret              string   `json:"cookie_secret"`
 	OauthClientID             string   `json:"oauth_client_id"`
 	OauthClientSecret         string   `json:"oauth_client_secret"`
@@ -51,6 +52,15 @@ func (c *appConfig) ReadConfig() {
 
 	c.StripeKey = viper.GetString("stripe.key")
 
+	c.EncKey = viper.GetString("app.enc_key")
+	c.SessionName = viper.GetString("app.session_name")
+
+	c.CookieSecret = viper.GetString("app.cookie_secret")
+	c.OauthClientID = viper.GetString("oauth_settings.client_id")
+	c.OauthClientSecret = viper.GetString("oauth_settings.client_secret")
+	c.OauthRedirectURL = viper.GetString("oauth_settings.redirect_url")
+	c.OauthIssuerURL = viper.GetString("oauth_settings.issuer_url")
+	c.OauthScopes = viper.GetStringSlice("oauth_settings.scopes")
 	return
 }
 

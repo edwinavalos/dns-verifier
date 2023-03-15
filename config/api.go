@@ -67,21 +67,30 @@ func (c *Config) StripeKey() string {
 func (c *Config) EncKey() string {
 	return c.appConfig.EncKey
 }
+func (c *Config) SessionName() string {
+	return c.appConfig.SessionName
+}
+
 func (c *Config) CookieSecret() string {
 	return c.appConfig.CookieSecret
 }
+
 func (c *Config) OauthClientID() string {
 	return c.appConfig.OauthClientID
 }
+
 func (c *Config) OauthClientSecret() string {
 	return c.appConfig.OauthClientSecret
 }
+
 func (c *Config) OauthRedirectURL() string {
 	return c.appConfig.OauthRedirectURL
 }
+
 func (c *Config) OauthIssuerURL() string {
 	return c.appConfig.OauthIssuerURL
 }
+
 func (c *Config) OauthScopes() []string {
 	return c.appConfig.OauthScopes
 }
