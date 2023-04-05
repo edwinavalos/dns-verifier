@@ -6,10 +6,10 @@ storage:
   table_name: dns-verifier
   region: us-east-1
   is_local: true
+  alwaysRecreate: false
 
 app:
   verificationTxtRecordName: "mastodon_ownership_key"
-  alwaysRecreate: false
 
 network:
   owned_hosts:

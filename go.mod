@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.10.19
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.19.2
 	github.com/aws/smithy-go v1.13.5
-	github.com/edwinavalos/common v0.0.0-20230404023845-3d773af062f1
+	github.com/edwinavalos/common v0.0.0-20230405020806-20bcb9287bee
 	github.com/gin-gonic/gin v1.9.0
 	github.com/go-acme/lego/v4 v4.10.2
 	github.com/google/uuid v1.3.0
