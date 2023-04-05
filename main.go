@@ -16,7 +16,6 @@ func main() {
 	rand.Seed(time.Now().Unix())
 
 	cfg := config.NewConfig()
-	cfg.ReadConfig()
 	datastore, err := storage.NewDataStore(cfg)
 	if err != nil {
 		panic(err)
