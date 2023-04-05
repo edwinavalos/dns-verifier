@@ -27,7 +27,7 @@ package domain_service
 //					VerificationWarningStamp: time.Time{},
 //					VerificationExpireStamp:  time.Time{},
 //				},
-//				UserId: uuid.UUID{},
+//				UserID: uuid.UUID{},
 //			},
 //			config: &config.Config{
 //				CloudProvider: config.AWSSettings{},
@@ -53,7 +53,7 @@ package domain_service
 //						VerificationWarningStamp: time.Time{},
 //						VerificationExpireStamp:  time.Time{},
 //					},
-//					UserId: uuid.UUID{},
+//					UserID: uuid.UUID{},
 //				},
 //				config: &config.Config{
 //					CloudProvider: config.AWSSettings{},

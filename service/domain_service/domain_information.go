@@ -4,29 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edwinavalos/dns-verifier/config"
-	"github.com/edwinavalos/dns-verifier/datastore"
-	"github.com/edwinavalos/dns-verifier/logger"
-	"github.com/edwinavalos/dns-verifier/models"
+	"github.com/edwinavalos/common/config"
+	"github.com/edwinavalos/common/logger"
+	"github.com/edwinavalos/common/models"
+	"github.com/edwinavalos/dns-verifier/storage"
 	"github.com/edwinavalos/dns-verifier/utils"
+	"github.com/google/uuid"
 	"net"
 )
-
-var cfg *config.config
-var l *logger.Logger
-var dbStorage datastore.Datastore
-
-func SetDBStorage(toSet datastore.Datastore) {
-	dbStorage = toSet
-}
-
-func SetConfig(conf *config.config) {
-	cfg = conf
-}
-
-func SetLogger(toSet *logger.Logger) {
-	l = toSet
-}
 
 var (
 	ErrUnableToFindUser    = errors.New("unable to find userId verification map")
@@ -34,77 +19,84 @@ var (
 	ErrNoDomainInformation = errors.New("unable to find domain in userId's in verification map")
 )
 
-func SaveDomain(info models.DomainInformation) error {
-	err := dbStorage.PutDomainInfo(info)
-	if err != nil {
-		return err
-	}
-	return nil
+type Service struct {
+	verifierStore *storage.VerifierDataStore
+	cfg           *config.Config
 }
 
-func GetAllRecords() (map[string]map[string]models.DomainInformation, error) {
-	records, err := dbStorage.GetAllRecords()
+type ServiceOpt func(s *Service)
+
+func New(conf *config.Config, store *storage.VerifierDataStore, opts ...ServiceOpt) *Service {
+	s := &Service{
+		verifierStore: store,
+		cfg:           conf,
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func (s *Service) GetAllRecords(ctx context.Context) (map[string]models.User, error) {
+	records, err := s.verifierStore.GetAllRecords(ctx)
 	if err != nil {
-		return nil, err
+		return map[string]models.User{}, err
 	}
 
-	retMap := map[string]map[string]models.DomainInformation{}
+	retMap := map[string]models.User{}
 	for _, v := range records {
-		_, ok := retMap[v.UserId]
-		if !ok {
-			retMap[v.UserId] = map[string]models.DomainInformation{}
-		}
-		retMap[v.UserId][v.DomainName] = v
+		retMap[v.ID] = v
 	}
 
 	return retMap, nil
 }
 
-func GetUserDomains(userId string) (map[string]map[string]models.DomainInformation, error) {
-	domains, err := dbStorage.GetUserDomains(userId)
-	if err != nil {
-		return nil, fmt.Errorf("ran into issue getting user's domain from dbstorage: %w", err)
-	}
-	return map[string]map[string]models.DomainInformation{userId: domains}, nil
+func (s *Service) GetUserDomains(ctx context.Context, userId uuid.UUID) (map[string]models.DomainInformation, error) {
+	return s.verifierStore.GetUserDomains(ctx, userId)
 }
 
-func PutDomain(userId string, domainName string) error {
-	return dbStorage.PutDomainInfo(models.DomainInformation{DomainName: domainName, UserId: userId})
+func (s *Service) GetDomainByUser(ctx context.Context, userID uuid.UUID, domain string) (models.DomainInformation, error) {
+	return s.verifierStore.GetDomainByUser(ctx, userID, domain)
 }
 
-func DeleteDomain(userId string, domainName string) error {
-	return dbStorage.DeleteDomain(userId, domainName)
+func (s *Service) PutDomain(ctx context.Context, domainInfo models.DomainInformation) error {
+	return s.verifierStore.PutDomainInfo(ctx, domainInfo)
 }
 
-func GenerateOwnershipKey(userId string, domainName string) (string, error) {
-	di, err := dbStorage.GetDomainByUser(userId, domainName)
-	if err != nil {
-		return "", err
-	}
+func (s *Service) DeleteDomain(ctx context.Context, userID uuid.UUID, domainName string) error {
+	return s.verifierStore.DeleteDomain(ctx, userID, domainName)
+}
 
-	di.Verification.VerificationKey = fmt.Sprintf("%s;%s;%s", cfg.App.VerificationTxtRecordName, di.DomainName, utils.RandomString(30))
-	err = dbStorage.PutDomainInfo(di)
+func (s *Service) GenerateOwnershipKey(ctx context.Context, userID uuid.UUID, domainName string) (string, error) {
+	di, err := s.verifierStore.GetDomainByUser(ctx, userID, domainName)
 	if err != nil {
 		return "", err
 	}
 
-	return di.Verification.VerificationKey, nil
+	di.Verification.Key = fmt.Sprintf("%s;%s;%s", s.cfg.VerificationTxtRecordName(), di.DomainName, utils.RandomString(30))
+	di.Verification.Zone = fmt.Sprintf(domainName + ".")
+	err = s.PutDomain(ctx, di)
+	if err != nil {
+		return "", err
+	}
+
+	return di.Verification.Key, nil
 }
 
-func VerifyTXTRecord(ctx context.Context, verificationZone string, verificationKey string) (bool, error) {
+func (s *Service) VerifyTXTRecord(ctx context.Context, verificationZone string, verificationKey string) (bool, error) {
 	txtRecords, err := net.LookupTXT(verificationZone)
 	if err != nil {
 		return false, err
 	}
 
-	l.Infof("txtRecords: %+v", txtRecords)
-	l.Infof("trying to find: %s", verificationKey)
+	logger.Info("txtRecords: %+v", txtRecords)
+	logger.Info("trying to find: %s", verificationKey)
 	for _, txt := range txtRecords {
 		if txt == verificationKey {
-			l.Infof("found key: %s", txt)
+			logger.Info("found key: %s", txt)
 			return true, nil
 		}
-		l.Infof("record: %s, on %s", txt, verificationZone)
+		logger.Info("record: %s, on %s", txt, verificationZone)
 	}
 
 	return false, nil
@@ -119,9 +111,9 @@ func contains[T comparable](elems []T, v T) bool {
 	return false
 }
 
-func VerifyARecord(ctx context.Context, userId string, domainName string) (bool, error) {
+func (s *Service) VerifyARecord(ctx context.Context, userID uuid.UUID, domainName string) (bool, error) {
 
-	di, err := dbStorage.GetDomainByUser(userId, domainName)
+	di, err := s.verifierStore.GetDomainByUser(ctx, userID, domainName)
 	aRecords, err := net.LookupHost(di.DomainName)
 	if err != nil {
 		return false, err
@@ -129,7 +121,7 @@ func VerifyARecord(ctx context.Context, userId string, domainName string) (bool,
 
 	// This might need to become that all A records are pointing at us, which might be the correct thing to do
 	for _, record := range aRecords {
-		if contains(cfg.Network.OwnedHosts, record) {
+		if contains(s.cfg.OwnedHosts(), record) {
 			return true, nil
 		}
 	}
@@ -137,16 +129,16 @@ func VerifyARecord(ctx context.Context, userId string, domainName string) (bool,
 	return false, nil
 }
 
-func VerifyCNAME(ctx context.Context, userId string, domainName string) (bool, error) {
+func (s *Service) VerifyCNAME(ctx context.Context, userID uuid.UUID, domainName string) (bool, error) {
 
-	di, err := dbStorage.GetDomainByUser(userId, domainName)
+	di, err := s.verifierStore.GetDomainByUser(ctx, userID, domainName)
 
 	cname, err := net.LookupCNAME(di.DomainName)
 	if err != nil {
 		return false, err
 	}
 
-	if contains(cfg.Network.OwnedCNames, cname) {
+	if contains(s.cfg.OwnedCNames(), cname) {
 		return true, err
 	}
 

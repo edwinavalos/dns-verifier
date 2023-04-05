@@ -2,14 +2,17 @@ package v1
 
 import (
 	"fmt"
+	"github.com/edwinavalos/common/config"
+	"github.com/edwinavalos/common/logger"
 	"github.com/edwinavalos/dns-verifier/service/cert_service"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"net/http"
 )
 
 type CertificateReq struct {
-	UserId string `json:"user_id"`
-	Domain string `json:"domain"`
+	UserId uuid.UUID `json:"user_id"`
+	Domain string    `json:"domain"`
 }
 
 type RequestCertificateResp struct {
@@ -25,21 +28,33 @@ type CompleteCertificateRequestResp struct {
 	Error   string `json:"error,omitempty"`
 }
 
-func HandleRequestCertificate(c *gin.Context) {
+type CertHandler struct {
+	certService *cert_service.Service
+	cfg         *config.Config
+}
+
+func NewCertHandler(conf *config.Config, certService *cert_service.Service) *CertHandler {
+	return &CertHandler{
+		certService: certService,
+		cfg:         conf,
+	}
+}
+
+func (h *CertHandler) HandleRequestCertificate(c *gin.Context) {
 	var newCertReq CertificateReq
 	err := c.BindJSON(&newCertReq)
 	if err != nil {
 		return
 	}
 
-	if newCertReq.UserId == "" || newCertReq.Domain == "" {
+	if newCertReq.UserId == uuid.Nil || newCertReq.Domain == "" {
 		c.JSON(http.StatusBadRequest, RequestCertificateResp{
 			Error: "missing user_id or domain or email in request",
 		})
 		return
 	}
 
-	recordName, recordValue, alreadyValid, err := cert_service.RequestCertificate(newCertReq.UserId, newCertReq.Domain, cfg.LESettings.AdminEmail)
+	recordName, recordValue, alreadyValid, err := h.certService.RequestCertificate(newCertReq.UserId, newCertReq.Domain, h.cfg.LEAdminEmail())
 	if err != nil {
 		if alreadyValid {
 			c.JSON(http.StatusAccepted, RequestCertificateResp{
@@ -51,7 +66,7 @@ func HandleRequestCertificate(c *gin.Context) {
 			return
 		}
 
-		log.Errorf("unable to create new certificate request from Let's Encrypt: %s", err)
+		logger.Error("unable to create new certificate request from Let's Encrypt: %s", err)
 		c.JSON(http.StatusInternalServerError, RequestCertificateResp{
 			Domain: newCertReq.Domain,
 			Error:  fmt.Sprintf("unable to request new certificate from Let's Encrypt: %s", err),
@@ -67,7 +82,7 @@ func HandleRequestCertificate(c *gin.Context) {
 	return
 }
 
-func HandleCompleteCertificateRequest(c *gin.Context) {
+func (h *CertHandler) HandleCompleteCertificateRequest(c *gin.Context) {
 	var newCertReq CertificateReq
 	err := c.BindJSON(&newCertReq)
 	if err != nil {
@@ -76,16 +91,16 @@ func HandleCompleteCertificateRequest(c *gin.Context) {
 
 	domain := newCertReq.Domain
 	userId := newCertReq.UserId
-	if userId == "" || domain == "" {
+	if userId == uuid.Nil || domain == "" {
 		c.JSON(http.StatusBadRequest, CompleteCertificateRequestResp{
 			Error: "missing user_id or domain or email in request",
 		})
 		return
 	}
 
-	err = cert_service.CompleteCertificateRequest(userId, domain, "")
+	err = h.certService.CompleteCertificateRequest(userId, domain, "")
 	if err != nil {
-		log.Errorf("ran into issue complete certificate request: %s", err)
+		logger.Error("ran into issue complete certificate request: %s", err)
 		c.JSON(http.StatusInternalServerError, CompleteCertificateRequestResp{
 			Error: fmt.Sprintf("domain: %s, unable to complete certificate request: %s", domain, err),
 		})

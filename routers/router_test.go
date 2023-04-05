@@ -26,7 +26,7 @@ package routers
 //	w := httptest.NewRecorder()
 //	newDomainRequest := v1.CreateDomainInformationReq{
 //		DomainName: domainName,
-//		UserId:     uuid.New(),
+//		UserID:     uuid.New(),
 //	}
 //	var buf bytes.Buffer
 //	err = json.NewEncoder(&buf).Encode(newDomainRequest)

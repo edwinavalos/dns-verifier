@@ -4,6 +4,6 @@ verification.json
 *domain_information_test.json
 /docker/dynamodb/shared-local-instance.db
 .idea
-/datastore/test-file.jpg
-/datastore/s3_filestore/testfile*
-/datastore/test-file.empty
+/storage/test-file.jpg
+/storage/s3_filestore/testfile*
+/storage/test-file.empty

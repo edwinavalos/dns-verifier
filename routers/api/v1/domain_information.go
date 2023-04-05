@@ -1,16 +1,18 @@
 package v1
 
 import (
+	"context"
 	"fmt"
-	"github.com/edwinavalos/dns-verifier/models"
+	"github.com/edwinavalos/common/models"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"net/http"
 )
 
 type GenerateOwnershipKeyReq struct {
-	DomainName string `json:"domain_name"`
-	UserId     string `json:"user_id"`
+	DomainName string    `json:"domain_name"`
+	UserID     uuid.UUID `json:"user_id"`
 }
 
 type GenerateOwnershipKeyResp struct {
@@ -34,13 +36,13 @@ type DomainVerificationResp struct {
 type VerifyDomainsResp map[string]DomainVerificationResp
 
 type CreateDomainInformationReq struct {
-	DomainName string `json:"domain_name"`
-	UserId     string `json:"user_id"`
+	DomainName string    `json:"domain_name"`
+	UserID     uuid.UUID `json:"user_id"`
 }
 
 type DeleteDomainInformationReq struct {
-	DomainName string `json:"domain_name"`
-	UserId     string `json:"user_id"`
+	DomainName string    `json:"domain_name"`
+	UserID     uuid.UUID `json:"user_id"`
 }
 
 type DeleteDomainInformationResp struct {
@@ -49,11 +51,34 @@ type DeleteDomainInformationResp struct {
 	Error      string `json:"error,omitempty"`
 }
 
-func HandleGetDomainInformation(c *gin.Context) {
-	var retRecordMap map[string]map[string]models.DomainInformation
-	userId := c.Query("userId")
-	if userId == "" {
-		retRecordMap, err := domain_service.GetAllRecords()
+type Record string
+
+const (
+	ARecord = "arecord"
+	CName   = "cname"
+)
+
+type VerifyDelegationReq struct {
+	DomainName string    `json:"domain_name"`
+	UserId     uuid.UUID `json:"user_id"`
+	Type       Record    `json:"type"`
+}
+
+type DomainHandler struct {
+	domainService *domain_service.Service
+}
+
+func NewDomainHandler(service *domain_service.Service) *DomainHandler {
+	return &DomainHandler{
+		domainService: service,
+	}
+}
+
+func (d *DomainHandler) HandleGetDomainInformation(c *gin.Context) {
+	var retRecords map[string]models.DomainInformation
+	userID := c.Query("userID")
+	if userID == "" {
+		retRecordMap, err := d.domainService.GetAllRecords(context.TODO())
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ran into error getting all records: %s", err.Error())})
 			return
@@ -61,14 +86,18 @@ func HandleGetDomainInformation(c *gin.Context) {
 		c.JSON(http.StatusOK, retRecordMap)
 		return
 	}
-
-	retRecordMap, err := domain_service.GetUserDomains(userId)
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("ran into error parsing uuid: %s", err.Error())})
+		return
+	}
+	retRecords, err = d.domainService.GetUserDomains(context.TODO(), userUUID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ran into error creating user recordmap: %s", err.Error())})
 		return
 	}
 
-	c.JSON(http.StatusOK, retRecordMap)
+	c.JSON(http.StatusOK, retRecords)
 	return
 }
 
@@ -76,7 +105,7 @@ func HandleGetDomainInformation(c *gin.Context) {
 // TODO: This behavior of wiping out the verification is probably too stronk, need to make it only create one if
 //
 //	there isn't other information. StoreOrLoad probably is what I want here.
-func HandleGenerateOwnershipKey(c *gin.Context) {
+func (d *DomainHandler) HandleGenerateOwnershipKey(c *gin.Context) {
 	var newGenerateOwnershipKeyReq = GenerateOwnershipKeyReq{}
 	err := c.BindJSON(&newGenerateOwnershipKeyReq)
 	if err != nil {
@@ -84,8 +113,8 @@ func HandleGenerateOwnershipKey(c *gin.Context) {
 	}
 
 	domainName := newGenerateOwnershipKeyReq.DomainName
-	userId := newGenerateOwnershipKeyReq.UserId
-	verificationKey, err := domain_service.GenerateOwnershipKey(userId, domainName)
+	userID := newGenerateOwnershipKeyReq.UserID
+	verificationKey, err := d.domainService.GenerateOwnershipKey(context.TODO(), userID, domainName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, GenerateOwnershipKeyResp{Error: fmt.Sprintf("unable to generate ownership key: %s", err)})
 		return
@@ -99,40 +128,44 @@ func HandleGenerateOwnershipKey(c *gin.Context) {
 }
 
 type VerifyOwnershipReq struct {
-	DomainName string `form:"domain_name"`
-	UserId     string `form:"user_id"`
+	DomainName string    `json:"domain_name"`
+	UserID     uuid.UUID `json:"user_id"`
 }
 
 // HandleVerifyOwnership only does TXT record checks
-func HandleVerifyOwnership(c *gin.Context) {
+func (d *DomainHandler) HandleVerifyOwnership(c *gin.Context) {
 	var newVerifyOwnershipReq VerifyOwnershipReq
-	err := c.BindQuery(&newVerifyOwnershipReq)
+	err := c.Bind(&newVerifyOwnershipReq)
 	if err != nil {
 		return
 	}
 
 	domainName := newVerifyOwnershipReq.DomainName
-	userId := newVerifyOwnershipReq.UserId
-	di := models.DomainInformation{DomainName: domainName, UserId: userId}
+	userID := newVerifyOwnershipReq.UserID
+	domain, err := d.domainService.GetDomainByUser(context.TODO(), userID, domainName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unable to find given user: %s with domain: %s", userID, domainName)})
+		return
+	}
 
-	result, err := domain_service.VerifyTXTRecord(c, di.Verification.VerificationZone, di.Verification.VerificationKey)
+	result, err := d.domainService.VerifyTXTRecord(c, domain.Verification.Zone, domain.Verification.Key)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("unable to verify domain: %s", err)})
 		return
 	}
 
-	if di.Verification.Verified != result {
-		di.Verification.Verified = result
+	if domain.Verification.Verified != result {
+		domain.Verification.Verified = result
 	}
 
-	err = domain_service.SaveDomain(di)
+	err = d.domainService.PutDomain(context.TODO(), domain)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
 	c.JSON(http.StatusOK, VerifyDomainResp{
-		DomainName: di.DomainName,
+		DomainName: domain.DomainName,
 		Status:     result,
 	})
 
@@ -178,7 +211,7 @@ func HandleVerifyOwnership(c *gin.Context) {
 
 // HandleCreateDomainInformation will create domain information if not present in VerificationMap
 // if it is present, we return 202 and move on with our lives
-func HandleCreateDomainInformation(c *gin.Context) {
+func (d *DomainHandler) HandleCreateDomainInformation(c *gin.Context) {
 	var newCreateDomainInformationReq = CreateDomainInformationReq{}
 	err := c.BindJSON(&newCreateDomainInformationReq)
 	if err != nil {
@@ -187,14 +220,18 @@ func HandleCreateDomainInformation(c *gin.Context) {
 	}
 
 	domain := newCreateDomainInformationReq.DomainName
-	userId := newCreateDomainInformationReq.UserId
+	userID := newCreateDomainInformationReq.UserID
 
-	if domain == "" || userId == "" {
+	if domain == "" || userID == uuid.Nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing domain_name or user_id"})
 		return
 	}
 
-	err = domain_service.PutDomain(userId, domain)
+	newDomain := models.DomainInformation{
+		DomainName: domain,
+		UserID:     userID,
+	}
+	err = d.domainService.PutDomain(context.TODO(), newDomain)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("ran into error putting domain: %s err: %s", domain, err)})
 		return
@@ -204,15 +241,15 @@ func HandleCreateDomainInformation(c *gin.Context) {
 	return
 }
 
-func HandleDeleteDomainInformation(c *gin.Context) {
+func (d *DomainHandler) HandleDeleteDomainInformation(c *gin.Context) {
 	var newDeleteDomainInformationReq DeleteDomainInformationReq
 	if err := c.Bind(&newDeleteDomainInformationReq); err != nil {
 		return
 	}
 
 	domainName := newDeleteDomainInformationReq.DomainName
-	userId := newDeleteDomainInformationReq.UserId
-	err := domain_service.DeleteDomain(userId, domainName)
+	userID := newDeleteDomainInformationReq.UserID
+	err := d.domainService.DeleteDomain(context.TODO(), userID, domainName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, DeleteDomainInformationResp{Error: fmt.Sprintf("unable to delete domain: %s err %s", domainName, err)})
 		return
@@ -222,35 +259,22 @@ func HandleDeleteDomainInformation(c *gin.Context) {
 	return
 }
 
-type Record string
-
-const (
-	ARecord = "arecord"
-	CName   = "cname"
-)
-
-type VerifyDelegationReq struct {
-	DomainName string `json:"domain_name"`
-	UserId     string `json:"user_id"`
-	Type       Record `json:"type"`
-}
-
-func HandleVerifyDelegation(c *gin.Context) {
+func (d *DomainHandler) HandleVerifyDelegation(c *gin.Context) {
 	var newVerifyDelegationRequest VerifyDelegationReq
 	err := c.BindJSON(&newVerifyDelegationRequest)
 	if err != nil {
 		return
 	}
 
-	userId := newVerifyDelegationRequest.UserId
+	userID := newVerifyDelegationRequest.UserId
 	domain := newVerifyDelegationRequest.DomainName
 
 	var verified bool
 	switch newVerifyDelegationRequest.Type {
 	case ARecord:
-		verified, err = domain_service.VerifyARecord(c, userId, domain)
+		verified, err = d.domainService.VerifyARecord(c, userID, domain)
 	case CName:
-		verified, err = domain_service.VerifyCNAME(c, userId, domain)
+		verified, err = d.domainService.VerifyCNAME(c, userID, domain)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

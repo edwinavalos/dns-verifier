@@ -2,7 +2,7 @@ cloud_provider:
   region: us-west-2
   bucket_name: mastodon-dns-verification
 
-db:
+storage:
   table_name: dns-verifier
   region: us-east-1
   is_local: true

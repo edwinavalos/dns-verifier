@@ -12,14 +12,15 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/aws/smithy-go/rand"
-	"github.com/edwinavalos/dns-verifier/config"
-	"github.com/edwinavalos/dns-verifier/datastore"
-	"github.com/edwinavalos/dns-verifier/logger"
-	"github.com/edwinavalos/dns-verifier/models"
+	"github.com/edwinavalos/common/config"
+	"github.com/edwinavalos/common/logger"
+	"github.com/edwinavalos/common/models"
 	"github.com/edwinavalos/dns-verifier/service/domain_service"
+	"github.com/edwinavalos/dns-verifier/storage"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/registration"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/acme"
 	"net"
 	"os"
@@ -29,30 +30,18 @@ import (
 	"time"
 )
 
-var cfg *config.config
-var l *logger.Logger
-var externalIP net.IP
-var dbStorage datastore.Datastore
-var fileStorage datastore.FileStore
-
-func SetDBStorage(toSet datastore.Datastore) {
-	dbStorage = toSet
+type Service struct {
+	fileStorage   *storage.VerifierFileStore
+	domainService *domain_service.Service
+	cfg           *config.Config
 }
 
-func SetFileStorage(toSet datastore.FileStore) {
-	fileStorage = toSet
-}
-
-func SetConfig(conf *config.config) {
-	cfg = conf
-}
-
-func SetLogger(toSet *logger.Logger) {
-	l = toSet
-}
-
-func SetExternalIP(toSet net.IP) {
-	externalIP = toSet
+func New(conf *config.Config, fileStorage *storage.VerifierFileStore, domainService *domain_service.Service) *Service {
+	return &Service{
+		fileStorage:   fileStorage,
+		domainService: domainService,
+		cfg:           conf,
+	}
 }
 
 type certRequestUser struct {
@@ -71,9 +60,9 @@ func (u *certRequestUser) GetPrivateKey() crypto.PrivateKey {
 	return u.key
 }
 
-func getRequestUserCert() (*ecdsa.PrivateKey, error) {
+func (s *Service) getRequestUserCert() (*ecdsa.PrivateKey, error) {
 	var privateKey *ecdsa.PrivateKey
-	_, err := os.Stat(cfg.LESettings.PrivateKeyLocation)
+	_, err := os.Stat(s.cfg.LEPrivateKeyLocation())
 	if err != nil {
 		var err2 error
 		privateKey, err2 = ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
@@ -85,12 +74,12 @@ func getRequestUserCert() (*ecdsa.PrivateKey, error) {
 		if err3 != nil {
 			return nil, fmt.Errorf("problem marshalling private key: %w", err3)
 		}
-		err4 := os.WriteFile(cfg.LESettings.PrivateKeyLocation, keyBytes, 0644)
+		err4 := os.WriteFile(s.cfg.LEPrivateKeyLocation(), keyBytes, 0644)
 		if err4 != nil {
 			return nil, fmt.Errorf("problem writing private key file: %w", err4)
 		}
 	} else {
-		dBytes, err2 := os.ReadFile(cfg.LESettings.PrivateKeyLocation)
+		dBytes, err2 := os.ReadFile(s.cfg.LEPrivateKeyLocation())
 		if err2 != nil {
 			return nil, fmt.Errorf("unable to read privateKey file: %w", err2)
 		}
@@ -109,12 +98,12 @@ func getRequestUserCert() (*ecdsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func recordInPlace(domainInfo models.DomainInformation) bool {
-	if domainInfo.LEVerification.VerificationKey == "" || domainInfo.LEVerification.VerificationZone == "" {
+func (s *Service) recordInPlace(domainInfo models.DomainInformation) bool {
+	if domainInfo.Verification.Key == "" || domainInfo.Verification.Zone == "" {
 		return false
 	}
 
-	found, err := domain_service.VerifyTXTRecord(context.TODO(), domainInfo.LEVerification.VerificationZone, domainInfo.LEVerification.VerificationKey)
+	found, err := s.domainService.VerifyTXTRecord(context.TODO(), domainInfo.Verification.Zone, domainInfo.Verification.Key)
 	if err != nil || !found {
 		return false
 	}
@@ -122,19 +111,19 @@ func recordInPlace(domainInfo models.DomainInformation) bool {
 	return true
 }
 
-func CompleteCertificateRequest(userId string, domain string, email string) error {
+func (s *Service) CompleteCertificateRequest(userID uuid.UUID, domain string, email string) error {
 	// Retrieve our domain info from the database
-	domainInfo, err := dbStorage.GetDomainByUser(userId, domain)
+	domainInfo, err := s.domainService.GetDomainByUser(context.TODO(), userID, domain)
 	if err != nil {
 		return fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
 	}
 
-	inPlace := recordInPlace(domainInfo)
+	inPlace := s.recordInPlace(domainInfo)
 	if !inPlace {
 		return fmt.Errorf("unable to verify that your record is in place before completing request")
 	}
 
-	privateKey, err := getRequestUserCert()
+	privateKey, err := s.getRequestUserCert()
 	if err != nil {
 		return fmt.Errorf("unable to requestUserCert(): %w", err)
 	}
@@ -142,46 +131,47 @@ func CompleteCertificateRequest(userId string, domain string, email string) erro
 	// Create our client which will interact with the acme api
 	client := &acme.Client{
 		Key:          privateKey,
-		DirectoryURL: cfg.LESettings.CADirURL,
+		DirectoryURL: s.cfg.LECADirURL(),
 	}
 
-	if domainInfo.LEVerification.Verified == true && domainInfo.LEInfo.CertURL != "" {
-		certs, err := client.FetchCert(context.TODO(), domainInfo.LEInfo.CertURL, true)
+	certInfo := domainInfo.Verification.CertInfo
+	if domainInfo.Verification.Verified == true && certInfo.CertURL != "" {
+		certs, err := client.FetchCert(context.TODO(), certInfo.CertURL, true)
 		if err != nil {
 			return err
 		}
 
-		err2 := WriteToStorage(privateKey, domain, certs)
+		err2 := s.WriteToStorage(privateKey, domain, certs)
 		if err2 != nil {
 			return err2
 		}
 		return nil
 	}
 
-	if domainInfo.LEInfo.OrderURL == "" {
+	if certInfo.OrderURL == "" {
 		return fmt.Errorf("missing order_url")
 	}
 
 	identifiers := acme.DomainIDs(domain)
-	authOrder, err := client.GetOrder(context.TODO(), domainInfo.LEInfo.OrderURL)
+	authOrder, err := client.GetOrder(context.TODO(), certInfo.OrderURL)
 	if err != nil || authOrder.Status == acme.StatusInvalid {
 		return fmt.Errorf("AuthorizeOrder: %v", err)
 	}
 	// we set this because get order doesn't populate the URI value
-	authOrder.URI = domainInfo.LEInfo.OrderURL
+	authOrder.URI = certInfo.OrderURL
 
-	if domainInfo.LEInfo.AuthzURL == "" {
+	if certInfo.AuthzURL == "" {
 		return fmt.Errorf("missing authz_url")
 	}
-	authz, err := client.GetAuthorization(context.TODO(), domainInfo.LEInfo.AuthzURL)
+	authz, err := client.GetAuthorization(context.TODO(), certInfo.AuthzURL)
 	if err != nil {
 		return err
 	}
 
-	if domainInfo.LEInfo.ChallengeURL == "" {
+	if certInfo.ChallengeURL == "" {
 		return fmt.Errorf("missing challenge_url")
 	}
-	chal, err := client.GetChallenge(context.TODO(), domainInfo.LEInfo.ChallengeURL)
+	chal, err := client.GetChallenge(context.TODO(), certInfo.ChallengeURL)
 	if err != nil {
 		return err
 	}
@@ -196,15 +186,16 @@ func CompleteCertificateRequest(userId string, domain string, email string) erro
 	if err != nil {
 		return fmt.Errorf("CreateOrderCert: %v", err)
 	}
-	domainInfo.LEInfo.CertURL = curl
-	domainInfo.LEVerification.Verified = true
-	err = dbStorage.PutDomainInfo(domainInfo)
+	certInfo.CertURL = curl
+	domainInfo.Verification.Verified = true
+	domainInfo.Verification.CertInfo = certInfo
+	err = s.domainService.PutDomain(context.TODO(), domainInfo)
 	if err != nil {
 		return err
 	}
-	l.Infof("cert URL: %s", curl)
+	logger.Info("cert URL: %s", curl)
 
-	err2 := WriteToStorage(privateKey, domain, ders)
+	err2 := s.WriteToStorage(privateKey, domain, ders)
 	if err2 != nil {
 		return err2
 	}
@@ -212,7 +203,7 @@ func CompleteCertificateRequest(userId string, domain string, email string) erro
 	return nil
 }
 
-func WriteToStorage(privateKey *ecdsa.PrivateKey, domain string, ders [][]byte) error {
+func (s *Service) WriteToStorage(privateKey *ecdsa.PrivateKey, domain string, ders [][]byte) error {
 	keyBytes, err := x509.MarshalECPrivateKey(privateKey)
 	if err != nil {
 		return err
@@ -231,7 +222,7 @@ func WriteToStorage(privateKey *ecdsa.PrivateKey, domain string, ders [][]byte) 
 		return fmt.Errorf("failed to encode PEM block: %v\n", err)
 	}
 
-	err = fileStorage.SaveBuf(privBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.key", domain))
+	err = s.fileStorage.SaveBuf(privBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.key", domain))
 	if err != nil {
 		return err
 	}
@@ -241,7 +232,7 @@ func WriteToStorage(privateKey *ecdsa.PrivateKey, domain string, ders [][]byte) 
 		mergedDers = append(mergedDers, slice...)
 	}
 	secondBuf := bytes.NewBuffer(mergedDers)
-	err = fileStorage.SaveBuf(*secondBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.crt", domain))
+	err = s.fileStorage.SaveBuf(*secondBuf, fmt.Sprintf("mastodon_le_certs/%s/cert.crt", domain))
 	if err != nil {
 		return err
 	}
@@ -286,14 +277,14 @@ func completeDNS01(ctx context.Context, client *acme.Client, z *acme.Authorizati
 	if err != nil {
 		return fmt.Errorf("accept(%q): %v", chal.URI, err)
 	}
-	l.Infof("%+v", newChal)
+	logger.Info("%+v", newChal)
 
 	_, err = client.WaitAuthorization(context.TODO(), z.URI)
 	if err != nil {
 		return err
 	}
 
-	l.Infof("all challenges are done")
+	logger.Info("all challenges are done")
 	if _, err := client.WaitOrder(ctx, order.URI); err != nil {
 		return fmt.Errorf("waitOrder(%q): %v", order.URI, err)
 	}
@@ -317,19 +308,19 @@ func request(ctx context.Context, client *acme.Client, z *acme.Authorization) (s
 func getDnsChallenge(z *acme.Authorization) *acme.Challenge {
 	var chal *acme.Challenge
 	for i, c := range z.Challenges {
-		l.Infof("challenge %d: %+v", i, c)
+		logger.Info("challenge %d: %+v", i, c)
 		if c.Type == challenge.DNS01.String() {
-			l.Infof("picked %s for authz %s", c.URI, z.URI)
+			logger.Info("picked %s for authz %s", c.URI, z.URI)
 			chal = c
 		}
 	}
 	return chal
 }
 
-func RequestCertificate(userId string, domain string, email string) (string, string, bool, error) {
+func (s *Service) RequestCertificate(userId uuid.UUID, domain string, email string) (string, string, bool, error) {
 
 	// Get the private key for the cert administrator account
-	privateKey, err := getRequestUserCert()
+	privateKey, err := s.getRequestUserCert()
 	if err != nil {
 		return "", "", false, fmt.Errorf("unable to requestUserCert(): %w", err)
 	}
@@ -337,18 +328,19 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 	// Create our client which will interact with the acme api
 	client := &acme.Client{
 		Key:          privateKey,
-		DirectoryURL: cfg.LESettings.CADirURL,
+		DirectoryURL: s.cfg.LECADirURL(),
 	}
 
 	// Retrieve our domain info from the database
-	domainInfo, err := dbStorage.GetDomainByUser(userId, domain)
+	domainInfo, err := s.domainService.GetDomainByUser(context.TODO(), userId, domain)
 	if err != nil {
 		return "", "", false, fmt.Errorf("domain: %s unable to get DomainInfo from database: %w", domain, err)
 	}
 
 	// Log in and get our account information
 	//var account *acme.Account
-	if domainInfo.LEInfo.CertURL != "" {
+	certInfo := domainInfo.Verification.CertInfo
+	if certInfo.CertURL != "" {
 		// the url parameter is legacy and not used
 		_, err = client.GetReg(context.TODO(), "")
 		if err != nil {
@@ -367,13 +359,13 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 	// We create an order for our domain name, this is key to authorizing everything
 	// this kicks off the process
 	var authOrder *acme.Order
-	if domainInfo.LEInfo.OrderURL == "" {
+	if certInfo.OrderURL == "" {
 		authOrder, err = client.AuthorizeOrder(context.TODO(), identifiers)
 		if err != nil {
 			return "", "", false, err
 		}
 	} else {
-		authOrder, err = client.GetOrder(context.TODO(), domainInfo.LEInfo.OrderURL)
+		authOrder, err = client.GetOrder(context.TODO(), certInfo.OrderURL)
 		if err != nil {
 			return "", "", false, err
 		}
@@ -385,11 +377,11 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 		}
 		// We need to set this because it doesn't get populated by GetOrder
 		if authOrder.URI == "" {
-			authOrder.URI = domainInfo.LEInfo.OrderURL
+			authOrder.URI = certInfo.OrderURL
 		}
 	}
 	if authOrder == nil {
-		return "", "", false, fmt.Errorf("unable to find auth order in db or unable to authorize new order")
+		return "", "", false, fmt.Errorf("unable to find auth order in common or unable to authorize new order")
 	}
 
 	var zurls []string
@@ -399,24 +391,25 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 		if err != nil {
 			return "", "", false, fmt.Errorf("GetAuthorization(%q): %v", u, err)
 		}
-		l.Infof("Authorizations: %+v", z)
+		logger.Info("Authorizations: %+v", z)
 		if z.Status == acme.StatusValid {
 			chal := getDnsChallenge(z)
 			dnsToken, err := client.DNS01ChallengeRecord(chal.Token)
 			if err != nil {
 				return "", "", true, fmt.Errorf("unable to get dns token from challenge")
 			}
-			domainInfo.LEInfo.ChallengeURL = chal.URI
-			domainInfo.LEVerification.VerificationKey = dnsToken
-			domainInfo.LEVerification.VerificationZone = zone
-			err = dbStorage.PutDomainInfo(domainInfo)
+			certInfo.ChallengeURL = chal.URI
+			domainInfo.Verification.Key = dnsToken
+			domainInfo.Verification.Zone = zone
+			domainInfo.Verification.CertInfo = certInfo
+			err = s.domainService.PutDomain(context.TODO(), domainInfo)
 			if err != nil {
 				return "", "", true, err
 			}
 			return "", "", true, fmt.Errorf("dns name is always validated, not creating a new request")
 		}
 		if z.Status != acme.StatusPending && z.Status != acme.StatusInvalid {
-			l.Infof("authz status is %q; skipping", z.Status)
+			logger.Info("authz status is %q; skipping", z.Status)
 			continue
 		}
 		var dnsToken string
@@ -430,19 +423,20 @@ func RequestCertificate(userId string, domain string, email string) (string, str
 		if chal == nil || dnsToken == "" {
 			return "", "", false, fmt.Errorf("unable to find dns challenge")
 		}
-		domainInfo.LEVerification.VerificationZone = zone
-		domainInfo.LEVerification.VerificationKey = dnsToken
-		domainInfo.LEInfo.OrderURL = authOrder.URI
-		domainInfo.LEInfo.ChallengeURL = chal.URI
-		domainInfo.LEInfo.AuthzURL = z.URI
-		domainInfo.LEInfo.FinalizeURL = authOrder.FinalizeURL
-		err = dbStorage.PutDomainInfo(domainInfo)
+		domainInfo.Verification.Zone = zone
+		domainInfo.Verification.Key = dnsToken
+		certInfo.OrderURL = authOrder.URI
+		certInfo.ChallengeURL = chal.URI
+		certInfo.AuthzURL = z.URI
+		certInfo.FinalizeURL = authOrder.FinalizeURL
+		domainInfo.Verification.CertInfo = certInfo
+		err = s.domainService.PutDomain(context.TODO(), domainInfo)
 		if err != nil {
 			return "", "", false, err
 		}
 		zurls = append(zurls, z.URI)
-		l.Infof("authorized for %+v", z.Identifier)
-		return domainInfo.LEVerification.VerificationZone, domainInfo.LEVerification.VerificationKey, false, nil
+		logger.Info("authorized for %+v", z.Identifier)
+		return domainInfo.Verification.Zone, domainInfo.Verification.Key, false, nil
 	}
 
 	return "", "", false, fmt.Errorf("no dns01 challenges to complete")
@@ -468,19 +462,19 @@ func toStringList(ips []net.IP) []string {
 
 func saveCertificates(publicKeyLocation string, privateKeyLocation string, basePath string, certificates *certificate.Resource) error {
 	generatedLocation := filepath.Join(basePath + "/keys/.generated")
-	l.Infof("Saving public key to: %s", publicKeyLocation)
+	logger.Info("Saving public key to: %s", publicKeyLocation)
 	err := os.WriteFile(publicKeyLocation, certificates.Certificate, 0644)
 	if err != nil {
 		return err
 	}
 
-	l.Infof("Saving private key to: %s", privateKeyLocation)
+	logger.Info("Saving private key to: %s", privateKeyLocation)
 	err = os.WriteFile(privateKeyLocation, certificates.PrivateKey, 0600)
 	if err != nil {
 		return err
 	}
 
-	l.Infof("Touching generated file: %s", generatedLocation)
+	logger.Info("Touching generated file: %s", generatedLocation)
 	_, err = os.Create(generatedLocation)
 	if err != nil {
 		return err
